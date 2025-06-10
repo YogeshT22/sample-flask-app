@@ -4,7 +4,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def hello_world():
-    return 'Hello from my CI/CD Pipeline! Version 1'
+    return 'This is updated message for second time run!'
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
