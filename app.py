@@ -4,7 +4,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def hello_world():
-    return 'This is updated message for second time run!'
+    return 'Version 3, Gitea webhook push!'
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
