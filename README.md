@@ -43,3 +43,6 @@ This repository is not intended to be run standalone. It should be:
 2.  Configured as the source code repository for a "Pipeline" job in the platform's Jenkins server.
 
 When a `git push` is made to the Gitea repository, a webhook will trigger the Jenkins pipeline, which reads the `Jenkinsfile` and executes the automated CI/CD process.
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
