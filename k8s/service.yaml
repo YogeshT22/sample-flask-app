@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-app-service
+spec:
+  # ClusterIP is the default, but we'll be explicit.
+  # This makes the service only reachable from within the cluster.
+  type: ClusterIP
+  selector:
+    app: flask-app
+  ports:
+    - protocol: TCP
+      # The service still listens on port 80 internally
+      port: 80
+      targetPort: 5000
