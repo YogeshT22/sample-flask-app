@@ -14,7 +14,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out code from Gitea...'
+                echo 'Checking out latest code from Gitea.....'
                 git url: 'http://gitea-server:3000/admin/sample-flask-app.git', branch: 'main'
             }
         }
