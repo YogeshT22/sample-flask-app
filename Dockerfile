@@ -1,5 +1,5 @@
 # Stage 1: Use a standard Python image to install dependencies
-FROM python:3.9-bookworm-slim as builder
+FROM python:3.9-slim-bookworm as builder
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
