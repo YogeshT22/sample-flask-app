@@ -57,12 +57,12 @@ pipeline {
                         echo 'Applying the new configuration to the cluster...'
                         // 'kubectl' will automatically use the KUBECONFIG environment variable
                         // to connect to the correct cluster.
-                        // The insecure flag is no longer needed!
-                        sh 'kubectl apply -f k8s/'
+                        // The insecure flag is needed!
+                        sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
 
                         echo 'Waiting for the deployment to complete...'
                         // This command waits until the new version is rolled out successfully.
-                        sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
+                        sh "kubectl --insecure-skip-tls-verify rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
                     }
                 }
             }
