@@ -14,7 +14,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out code from Gitea...'
+                echo 'Checking out latest code from Gitea.....'
                 git url: 'http://gitea-server:3000/admin/sample-flask-app.git', branch: 'main'
             }
         }
@@ -36,13 +36,31 @@ pipeline {
             }
         }
 
+        // --- Security Scan --- Trivy ---
+        stage('Security Scan') {
+            steps {
+                echo 'Scanning Docker image for vulnerabilities...'
+                script {
+                    def imageTag = "build-${BUILD_NUMBER}"
+                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+
+                    // Run the Trivy scan.
+                    // --exit-code 1: If vulnerabilities are found, the command will exit with an error code, failing the pipeline.
+                    // --severity HIGH,CRITICAL: We only care about high-impact vulnerabilities for this gate.
+                    // --no-progress: This cleans up the log output for a CI environment.
+                    sh "trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress ${fullImageName}"
+                }
+            }
+        }
+    // --- END OF NEW STAGE ---
+
         stage('Deploy to Kubernetes') {
             steps {
                 echo 'Deploying to the K3s cluster...'
                 // This 'withCredentials' block is the key to secure access
                 // It makes the 'kubeconfig-k3d' secret file available as a temporary file
                 // and sets the KUBECONFIG environment variable to its path.
-                withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
+                withCredentials([file(credentialsId: 'kubeconfig-k3d', variable: 'KUBECONFIG')]) {
                     script {
                         def imageTag = "build-${BUILD_NUMBER}"
                         def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
@@ -57,12 +75,11 @@ pipeline {
                         echo 'Applying the new configuration to the cluster...'
                         // 'kubectl' will automatically use the KUBECONFIG environment variable
                         // to connect to the correct cluster.
-                        // The insecure flag is needed!
-                        sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
+                        sh 'kubectl apply -f k8s/'
 
                         echo 'Waiting for the deployment to complete...'
                         // This command waits until the new version is rolled out successfully.
-                        sh "kubectl --insecure-skip-tls-verify rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
+                        sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
                     }
                 }
             }
