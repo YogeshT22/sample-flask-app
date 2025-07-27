@@ -6,3 +6,28 @@ venv/
 
 # System files
 .DS_Store
+
+# --- Python ---
+# Ignore virtual environment folders
+venv/
+.venv/
+env/
+
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+
+# --- Secrets and Credentials ---
+# Just in case, ignore kubeconfig files here too
+kubeconfig.yaml
+kubeconfig-*.yaml
+*.kubeconfig
+
+# --- General ---
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE/editor files
+.vscode/
+.idea/
