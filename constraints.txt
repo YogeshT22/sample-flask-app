@@ -1,2 +1,0 @@
-# This file is used to constrain dependency versions for security and stability.
-setuptools>=78.1.1
