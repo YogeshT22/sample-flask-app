@@ -61,7 +61,7 @@ pipeline {
                 // It makes the 'kubeconfig-k3d' secret file available as a temporary file
                 // and sets the KUBECONFIG environment variable to its path.
 				// change to kubeconfig-sa from kubeconfig-k3d.
-                withCredentials([file(credentialsId: 'kubeconfig-k3d', variable: 'KUBECONFIG')]) {
+                withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
                     script {
                         def imageTag = "build-${BUILD_NUMBER}"
                         def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"

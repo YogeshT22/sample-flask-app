@@ -6,7 +6,9 @@ WORKDIR /app
 # Copy requirements first to leverage Docker's layer cache
 COPY requirements.txt .
 
-# Upgrade setuptools to a specific, non-vulnerable version BEFORE installing other requirements
+# --- SECURITY REMEDIATION STEP ---
+# Upgrade setuptools to a specific, non-vulnerable version BEFORE installing other requirements.
+# This fixes the HIGH vulnerability CVE-2022-40897.
 RUN pip install --no-cache-dir --upgrade setuptools==78.1.1
 
 # Now install the application's dependencies
@@ -18,7 +20,7 @@ FROM python:3.9-slim-bookworm
 
 WORKDIR /app
 
-# Copy only the installed Python packages from the builder stage. This is the key to a small final image.
+# Copy only the installed Python packages from the builder stage.
 COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
 
 # Copy the application code
