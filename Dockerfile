@@ -3,15 +3,15 @@ FROM python:3.9-slim-bookworm as builder
 
 WORKDIR /app
 
-# Copy requirements file
+# Copy both requirements and our new constraints file
 COPY requirements.txt .
+COPY constraints.txt .
 
-# --- CONSOLIDATED INSTALLATION STEP ---
-# This single RUN command ensures that caching works correctly.
-# If requirements.txt changes, this whole layer gets re-run.
-# We first upgrade pip and setuptools, then install from the requirements file.
-RUN pip install --no-cache-dir --upgrade pip "setuptools>=78.1.1" && \
-  pip install --no-cache-dir -r requirements.txt
+# --- CONSOLIDATED AND CACHE-BUSTED INSTALLATION ---
+# By using the constraints file, we ensure pip installs the correct, secure versions.
+# The -c flag tells pip to use the versions specified in this file.
+RUN pip install --no-cache-dir --upgrade pip && \
+  pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
 # Stage 2: Final stage
 FROM python:3.9-slim-bookworm
