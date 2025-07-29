@@ -1,4 +1,5 @@
 # Stage 1: Build stage - Use a modern, secure base image
+# We are sticking with bookworm as it's the current stable Debian release.
 FROM python:3.9-slim-bookworm as builder
 
 WORKDIR /app
@@ -7,9 +8,9 @@ WORKDIR /app
 COPY requirements.txt .
 
 # --- SECURITY REMEDIATION STEP ---
-# Upgrade setuptools to a specific, non-vulnerable version BEFORE installing other requirements.
-# This fixes the HIGH vulnerability CVE-2022-40897.
-RUN pip install --no-cache-dir --upgrade setuptools==78.1.1
+# Upgrade pip and setuptools to specific, non-vulnerable versions BEFORE installing other requirements.
+# This fixes the HIGH vulnerability CVE-2022-40897 found in the older setuptools.
+RUN pip install --no-cache-dir --upgrade pip "setuptools==78.1.1"
 
 # Now install the application's dependencies
 RUN pip install --no-cache-dir -r requirements.txt
