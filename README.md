@@ -30,6 +30,8 @@ This application is designed to be automatically built, secured, and deployed by
   - **`ingress.yaml`**: Configures the cluster's Ingress controller to expose the application to external traffic.
   - **`service-account.yaml`**: Creates a dedicated, secure identity for Jenkins to interact with the cluster.
   - **`jenkins-token-secret.yaml`**: A manifest for creating the authentication token secret for the Jenkins service account.
+  - **`k8s/service-account.yaml`**: Creates a dedicated, secure identity (`ServiceAccount`) for Jenkins to interact with the cluster.
+  - **`k8s/jenkins-token-secret.yaml`**: A manifest for creating the authentication token secret for the Jenkins service account (for K8s v1.24+).
 
 ---
 
