@@ -35,24 +35,6 @@ pipeline {
                 }
             }
         }
-    // BUGGY, commented out for now, May fix later ;
-    //     // --- Security Scan --- Trivy ---
-    //     stage('Security Scan') {
-    //         steps {
-    //             echo 'Scanning Docker image for vulnerabilities...'
-    //             script {
-    //                 def imageTag = "build-${BUILD_NUMBER}"
-    //                 def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
-
-    //                 // Run the Trivy scan.
-    //                 // --exit-code 1: If vulnerabilities are found, the command will exit with an error code, failing the pipeline.
-    //                 // --severity HIGH,CRITICAL: We only care about high-impact vulnerabilities for this gate.
-    //                 // --no-progress: This cleans up the log output for a CI environment.
-    //                 sh "trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress ${fullImageName}"
-    //             }
-    //         }
-    //     }
-    // // --- END OF NEW SECURITY SCAN STAGE ---
 
         stage('Deploy to Kubernetes') {
             steps {
