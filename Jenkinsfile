@@ -60,6 +60,7 @@ pipeline {
                 // This 'withCredentials' block is the key to secure access
                 // It makes the 'kubeconfig-k3d' secret file available as a temporary file
                 // and sets the KUBECONFIG environment variable to its path.
+				// change to kubeconfig-sa from kubeconfig-k3d.
                 withCredentials([file(credentialsId: 'kubeconfig-k3d', variable: 'KUBECONFIG')]) {
                     script {
                         def imageTag = "build-${BUILD_NUMBER}"
