@@ -1,3 +1,9 @@
+# --------------------------------------
+# Kubernetes Ingress for Flask App
+# Purpose: Expose Flask application via Ingress
+# Target: Local development using Kubernetes
+# ---------------------------------------
+
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -10,8 +16,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                # This tells the Ingress to send traffic...
                 name: flask-app-service
-                # ...to the service's port 80.
+                # Dev note: This routes traffic to the service's port 80.
                 port:
                   number: 80

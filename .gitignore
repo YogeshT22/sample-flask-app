@@ -31,3 +31,10 @@ Thumbs.db
 # Ignore IDE/editor files
 .vscode/
 .idea/
+
+# Ignore Python-related files
+*.py[cod]
+__pycache__/
+
+# Remove bakup files
+*.bakk

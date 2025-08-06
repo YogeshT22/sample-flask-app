@@ -1,9 +1,16 @@
+# --------------------------------------
+# Kubernetes Deployment for Flask App
+# Purpose: Deploy a Flask application with high availability
+# Target: Local development using Kubernetes
+# Registry: localhost:5000
+# --------------------------------------
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
     name: flask-app-deployment
 spec:
-    replicas: 2 # Run 2 instances of our app for high availability
+    replicas: 2 # Dev Note: Run 2 instances of our app for high availability!!!
     selector:
         matchLabels:
             app: flask-app
@@ -14,7 +21,6 @@ spec:
         spec:
             containers:
                 - name: flask-app-container
-                  # This is where our app image will be pulled from
                   image: localhost:5000/sample-flask-app:latest
                   ports:
                       - containerPort: 5000

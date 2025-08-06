@@ -1,3 +1,8 @@
+# --------------------------------------
+# Flask Application
+# Purpose: a Simple Flask app to demonstrate webhooks and Kubernetes deployment
+# ----------------------------------------
+
 from flask import Flask
 
 app = Flask(__name__)
