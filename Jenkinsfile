@@ -9,6 +9,8 @@ pipeline {
         REGISTRY_URL = 'localhost:5000'
         IMAGE_NAME = 'sample-flask-app'
 
+        AWS_Region = 'ap-south-1'
+        ECR_REPO_URI = '008679543675.dkr.ecr.ap-south-1.amazonaws.com/sample-flask-app'
         K8S_NAMESPACE = 'default'
         K8S_DEPLOYMENT_NAME = 'flask-app-deployment'
     }
@@ -21,48 +23,30 @@ pipeline {
             }
         }
 
-        stage('Build and Push Docker Image') {
+        stage('Build and Push to ECR') {
             steps {
-                echo 'Building and pushing the Docker image...'
+                echo 'Building and pushing the Docker image to ECR...'
                 script {
                     def imageTag = "build-${BUILD_NUMBER}"
-                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+                    def fullImageName = "${ECR_REPO_URI}:${imageTag}"
 
                     docker.build(fullImageName, '.')
 
-                    docker.image(fullImageName).push()
+                    // Log in to ECR and push image
+                    withAWS(region: AWS_REGION) {
+                        sh """
+                    aws ecr get-login-password --region ${AWS_REGION} \
+                    | docker login --username AWS --password-stdin ${ECR_REPO_URI}
+                """
+                        docker.image(fullImageName).push()
+                    }
                 }
             }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                echo 'Deploying to the K3s cluster!'
-
-                // REMINDER: This 'withCredentials' block is the key to secure access
-                // Dev note: It makes the 'kubeconfig-k3d' secret file available as a temp file
-                // and sets the KUBECONFIG environment variable to its path.
-                // FIX: change to kubeconfig-sa from kubeconfig-k3d (Dev).
-                withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
-                    script {
-                        def imageTag = "build-${BUILD_NUMBER}"
-                        def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
-
-                        echo "Updating Kubernetes deployment with new image: ${fullImageName}"
-
-                        // Dev note: dynamically update the image in our deployment manifest.
-                        sh "sed -i 's|image:.*|image: ${fullImageName}|' k8s/deployment.yaml"
-
-                        echo 'Applying the new configuration to the cluster!'
-
-                        // Dev note: '--insecure-skip-tls-verify' flag is used to bypass TLS verification.
-                        // WARNING: This is not for prod env (DEV)
-
-                        sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
-
-                        echo 'Waiting for the deployment to complete!'
-                        sh "kubectl --insecure-skip-tls-verify rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
-                    }
+            stage('Deploy') {
+                // For now, this stage will be a placeholder.
+                // We'll deploy to the K8s node in the next step.
+                steps {
+                    echo 'Deployment to K8s node would happen here.'
                 }
             }
         }
