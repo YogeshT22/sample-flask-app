@@ -1,6 +1,7 @@
 // ---------------------------------------------
 // This is a Jenkins pipeline script for a sample Flask application.
 // This is a personal project to demonstrate a complete CI/CD pipeline using Gitea, Jenkins, Docker, and Kubernetes.
+// Using Docker Pipeline Plugin, Plugin runs the 'docker build -t ...' in background
 // ---------------------------------------------
 pipeline {
     agent any
@@ -25,8 +26,8 @@ pipeline {
             steps {
                 echo 'Building and pushing the Docker image...'
                 script {
-                    def imageTag = "build-${BUILD_NUMBER}"
-                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+                    def imageTag = "build-${BUILD_NUMBER}" // so we calculate image tag using build number
+                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}" // we calculate full image name with tag
 
                     docker.build(fullImageName, '.')
 
@@ -57,6 +58,8 @@ pipeline {
 
                         // Dev note: '--insecure-skip-tls-verify' flag is used to bypass TLS verification.
                         // WARNING: This is not for prod env (DEV)
+
+                        // here, kubelet on the cluster's worker node instructs the underlying container runtime (using Docker) to pull the image from the registry and create a new container (a Pod) from that image.
 
                         sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
 
