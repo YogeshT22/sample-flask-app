@@ -1,7 +1,4 @@
-# flow is:
-# 1. Build the Docker image
-# 2. Push the image to the local registry
-# 3. Deploy the image to the K3s cluster
+# Builds the Docker image
 
 FROM python:3.9-slim-bookworm as builder
 

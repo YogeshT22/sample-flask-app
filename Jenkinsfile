@@ -1,7 +1,7 @@
 // ---------------------------------------------
 // This is a Jenkins pipeline script for a sample Flask application.
 // This is a personal project to demonstrate a complete CI/CD pipeline using Gitea, Jenkins, Docker, and Kubernetes.
-// Using Docker Pipeline Plugin, Plugin runs the 'docker build -t ...' in background
+// Using Docker Pipeline Plugin, Plugin runs the 'docker build -t ...'.
 // ---------------------------------------------
 pipeline {
     agent any
@@ -52,6 +52,8 @@ pipeline {
                         echo "Updating Kubernetes deployment with new image: ${fullImageName}"
 
                         // Dev note: dynamically update the image in our deployment manifest.
+                        // Dev note: for demo 'sed' is ok, but i should use kubectl set image or Helm in future release.
+
                         sh "sed -i 's|image:.*|image: ${fullImageName}|' k8s/deployment.yaml"
 
                         echo 'Applying the new configuration to the cluster!'
