@@ -1,5 +1,5 @@
 # --------------------------------------
-# Kubernetes Deployment for Flask App
+# Kubernetes Deployment for Flask App V2.0
 # Purpose: Deploy a Flask application with high availability
 # Target: Local development using Kubernetes
 # Registry: localhost:5000
@@ -8,19 +8,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-    name: flask-app-deployment
+  name: flask-app-deployment
 spec:
-    replicas: 2 # Dev Note: Run 2 instances of our app for high availability!!!
-    selector:
-        matchLabels:
-            app: flask-app
-    template:
-        metadata:
-            labels:
-                app: flask-app
-        spec:
-            containers:
-                - name: flask-app-container
-                  image: localhost:5000/sample-flask-app:latest
-                  ports:
-                      - containerPort: 5000
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flask-app
+  template:
+    metadata:
+      labels:
+        app: flask-app
+    spec:
+      containers:
+      - name: flask-app-container
+        image: localhost:5000/sample-flask-app:latest # Jenkins will overwrite this
+        ports:
+        - containerPort: 5000
+
+        env:
+        - name: APP_VERSION
+          value: "v2.0 - From Kubernetes!"
