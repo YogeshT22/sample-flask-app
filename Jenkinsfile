@@ -81,6 +81,68 @@ pipeline {
         }
         // --- END OF Trivy STAGE ---
 
+        // SBOM (Software Bill of Materials) Generation Stage
+        stage('SBOM Generation') {
+            steps {
+                echo "Generating Software Bill of Materials (SBOM) for the image..."
+                script {
+                    def imageTag = "build-${BUILD_NUMBER}"
+                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+                    def sbomFileName = "${IMAGE_NAME}-${imageTag}-sbom.json"
+
+                    // Use Trivy to generate the SBOM in CycloneDX JSON format
+                    // Save the SBOM as a build artifact in the workspace
+                    sh "trivy image --format cyclonedx --output ${sbomFileName} ${fullImageName}"
+
+                    // Archive the SBOM file in Jenkins, so it's accessible after the build.
+                    archiveArtifacts artifacts: sbomFileName, fingerprint: true
+                    echo "SBOM generated and archived: ${sbomFileName}"
+                }
+            }
+        }
+        // --- END OF SBOM STAGE ---
+
+    // --- NEW STAGE FOR IMAGE SIGNING ---
+        stage('Image Signing') {
+            steps {
+                echo "Signing Docker image with Cosign..."
+                script {
+                    def imageTag = "build-${BUILD_NUMBER}"
+                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+
+                    // --- IMPORTANT: GENERATE A Cosign Key Pair (One-Time) ---
+                    // You'll need to run this ONCE on your local WSL terminal:
+                    // cosign generate-key-pair
+                    // This creates 'cosign.key' (private) and 'cosign.pub' (public)
+                    // You will then store 'cosign.key' as a Jenkins Secret File.
+                    // 'cosign.pub' can be publicly shared.
+
+                    // We will pass the private key to the pipeline via Jenkins Credentials.
+                    withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
+                        // The COSIGN_PASSWORD will be set as an environment variable in Jenkins
+                        // for now, we will use a dummy password for local testing
+                        withEnv(["COSIGN_PASSWORD=testpassword123"]) {
+                            sh "cosign sign --key ${COSIGN_PRIVATE_KEY} ${fullImageName}"
+                            echo "Image signed successfully."
+                            // You would typically verify the signature here as well.
+                        // --- ADD THIS NEW STEP: Verification ---
+                            echo "Verifying image signature..."
+                            // We need the public key to verify. For a real pipeline, this would be a secret too.
+                            // For local, we will mount it or assume it's in the workspace.
+                            // Let's assume you've copied cosign.pub to your app's root folder for now.
+                            sh "cosign verify --key cosign.pub ${fullImageName}"
+                            echo "Image signature verified successfully!"
+                            // --- END OF NEW STEP ---
+                        }
+                    }
+                }
+            }
+        }
+        // --- END OF NEW STAGE ---
+
+
+
+        // --- Deploy to Kubernetes Stage ---
         stage('Deploy to Kubernetes') {
             steps {
                 echo 'Deploying to the K3s cluster!'
@@ -122,6 +184,8 @@ pipeline {
             }
         }
     }
+    // --- END OF Deploy to Kubernetes Stage ---
+    // --- NEW STAGE FOR CLEANUP ---
 
     post {
         always {
