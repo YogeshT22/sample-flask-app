@@ -28,22 +28,22 @@ pipeline {
                 echo "Scanning source code for hardcoded secrets..."
                 // Use Trivy to scan the filesystem for secrets.
                 // We will keep it non-blocking for now.
-                sh "trivy fs --scanners secret --no-progress ."
+                sh "trivy fs --scanners secret --no-progress --exit-code 1."
             }
         }
         // --- END OF NEW STAGE ---
 
-        // --- Dependency Scan STAGE ---
+        // // --- Dependency Scan STAGE ---
 
-        stage('Dependency Scan') {
-            steps {
-                echo "Scanning application dependencies for vulnerabilities..."
-                // Use Trivy to scan the filesystem, focusing on the requirements.txt
-                // We'll keep it non-blocking for now to see the report.
-                sh "trivy fs --severity HIGH,CRITICAL --no-progress ."
-            }
-        }
-        // --- END OF Dependency Scan STAGE ---
+        // stage('Dependency Scan') {
+        //     steps {
+        //         echo "Scanning application dependencies for vulnerabilities..."
+        //         // Use Trivy to scan the filesystem, focusing on the requirements.txt
+        //         // We'll keep it non-blocking for now to see the report.
+        //         sh "trivy fs --severity HIGH,CRITICAL --no-progress ."
+        //     }
+        // }
+        // // --- END OF Dependency Scan STAGE ---
 
         stage('Build and Push Docker Image') {
             steps {
@@ -74,7 +74,8 @@ pipeline {
                     // We will allow the build to continue even if vulnerabilities are found for now
                     // The goal is to see a CORRECT report first.
                     echo "Running Trivy scan... (non-blocking)"
-                    sh "trivy image --severity HIGH,CRITICAL --no-progress ${fullImageName}"
+                    sh "trivy image --severity HIGH,CRITICAL --exit-code 1 --no-progress ${fullImageName}"
+                    //sh "trivy image --severity HIGH,CRITICAL --exit-code 1 --no-progress ${fullImageName}" // Uncomment this line to make the build fail on vulnerabilities (DEV).
                 }
             }
         }
