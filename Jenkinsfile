@@ -124,6 +124,8 @@ pipeline {
                                     // FIX: Added --yes to skip confirmation prompt
                                     // FIX: Added --tlog-upload=false to stop it from trying to contact public Rekor server
                                     // FIX: Kept --allow-insecure-registry
+                                    echo "Checking Cosign Version..."
+                                    sh 'cosign version'
                                     sh '''
                                     cosign sign --yes --allow-insecure-registry --tlog-upload=false --key $COSIGN_PRIVATE_KEY $IMAGE_DIGEST
                                     '''
