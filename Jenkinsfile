@@ -121,18 +121,17 @@ pipeline {
 
                         withEnv([
                             "COSIGN_PASSWORD=testpassword123",
-                            "COSIGN_HTTP=true",
                             "COSIGN_INSECURE_REGISTRY=true"
                         ]) {
 
                             sh '''
-                            cosign sign --key $COSIGN_PRIVATE_KEY $IMAGE_DIGEST
+                            cosign sign --allow-insecure-registry --key $COSIGN_PRIVATE_KEY $IMAGE_DIGEST
                             '''
 
                             echo "Image signed successfully."
 
                             sh '''
-                            cosign verify --key cosign.pub $IMAGE_DIGEST
+                            cosign verify --allow-insecure-registry --key cosign.pub $IMAGE_DIGEST
                             '''
 
                             echo "Image signature verified successfully."
