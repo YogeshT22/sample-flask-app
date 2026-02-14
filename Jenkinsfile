@@ -109,7 +109,7 @@ pipeline {
                 script {
 
                     def imageTag = "build-${BUILD_NUMBER}"
-                    def cosignImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
+                    def cosignImage = "registry://local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
 
                     withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
 
