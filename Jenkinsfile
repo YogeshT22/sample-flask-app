@@ -18,7 +18,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Checking out latest code from Gitea'
-                git url: 'http://gitea-server:3000/admin/sample-flask-app.git', branch: 'main'
+                git url: 'http://gitea-server:3000/admin/sample-flask-app.git', branch: 'feature/v2.0'
             }
         }
 
@@ -53,7 +53,7 @@ pipeline {
             }
         }
         // --- NEW Trivy FOR SECURITY SCAN ---
-        stage('Security Scan') {
+        stage('Security Scan - Image Vulnerabilities') {
             steps {
                 echo "Scanning Docker image for vulnerabilities..."
                 script {
