@@ -22,6 +22,18 @@ pipeline {
             }
         }
 
+        // --- Dependency Scan STAGE ---
+
+        stage('Dependency Scan') {
+            steps {
+                echo "Scanning application dependencies for vulnerabilities..."
+                // Use Trivy to scan the filesystem, focusing on the requirements.txt
+                // We'll keep it non-blocking for now to see the report.
+                sh "trivy fs --severity HIGH,CRITICAL --no-progress ."
+            }
+        }
+        // --- END OF Dependency Scan STAGE ---
+
         stage('Build and Push Docker Image') {
             steps {
                 echo 'Building and pushing the Docker image...'
