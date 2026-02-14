@@ -22,6 +22,17 @@ pipeline {
             }
         }
 
+        // --- ADD THIS NEW STAGE ---
+        stage('Security Scan - Hardcoded Secrets') {
+            steps {
+                echo "Scanning source code for hardcoded secrets..."
+                // Use Trivy to scan the filesystem for secrets.
+                // We will keep it non-blocking for now.
+                sh "trivy fs --scanners secret --no-progress ."
+            }
+        }
+        // --- END OF NEW STAGE ---
+
         // --- Dependency Scan STAGE ---
 
         stage('Dependency Scan') {
