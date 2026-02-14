@@ -141,8 +141,9 @@ pipeline {
                             echo "Image signed successfully."
 
                             // 4. Verify using the IP address
+                        // FIX: Added --insecure-ignore-tlog so it doesn't fail looking for the log entry we never uploaded.
                             sh """
-                            cosign verify --allow-insecure-registry --key cosign.pub ${imageWithIp}
+                            cosign verify --allow-insecure-registry --insecure-ignore-tlog --key cosign.pub ${imageWithIp}
                             """
 
                             echo "Image signature verified successfully."
