@@ -110,41 +110,48 @@ pipeline {
         }
         // --- END OF SBOM STAGE ---
 
-    // --- NEW STAGE FOR IMAGE SIGNING ---
+// --- NEW STAGE FOR IMAGE SIGNING ---
         stage('Image Signing') {
-                    steps {
-                        script {
-                            def imageDigest = env.IMAGE_DIGEST
+            steps {
+                script {
+                    withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
+                        withEnv(["COSIGN_PASSWORD=testpassword123"]) { // Removed COSIGN_INSECURE_REGISTRY env, relying on flag
 
-                            withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                                withEnv([
-                                    "COSIGN_PASSWORD=testpassword123",
-                                    "COSIGN_INSECURE_REGISTRY=true"
-                                ]) {
-                                    // FIX: Added --yes to skip confirmation prompt
-                                    // FIX: Added --tlog-upload=false to stop it from trying to contact public Rekor server
-                                    // FIX: Kept --allow-insecure-registry
-                                    echo "Checking Cosign Version..."
-                                    sh 'cosign version'
-                                    sh '''
-                                    cosign sign --yes --allow-insecure-registry --tlog-upload=false --key $COSIGN_PRIVATE_KEY $IMAGE_DIGEST
-                                    '''
+                            // 1. Resolve the IP address of the registry container
+                            // This bypasses the "hostname means HTTPS" assumption in Cosign
+                            def registryIp = sh(
+                                script: "getent hosts local-docker-registry | awk '{ print \$1 }'",
+                                returnStdout: true
+                            ).trim()
 
-                                    echo "Image signed successfully."
+                            echo "Registry IP resolved to: ${registryIp}"
 
-                                    // FIX: verification also needs the insecure flags
-                                    sh '''
-                                    cosign verify --allow-insecure-registry --key cosign.pub $IMAGE_DIGEST
-                                    '''
+                            // 2. Reconstruct the image reference using the IP
+                            // We grab the digest part (sha256:...) from the original env var
+                            def digestOnly = env.IMAGE_DIGEST.split('@')[1]
+                            def imageWithIp = "${registryIp}:5000/sample-flask-app@${digestOnly}"
 
-                                    echo "Image signature verified successfully."
-                                }
-                            }
+                            echo "Signing image via IP: ${imageWithIp}"
+
+                            // 3. Sign using the IP address
+                            sh """
+                            cosign sign --yes --allow-insecure-registry --tlog-upload=false --key \$COSIGN_PRIVATE_KEY ${imageWithIp}
+                            """
+
+                            echo "Image signed successfully."
+
+                            // 4. Verify using the IP address
+                            sh """
+                            cosign verify --allow-insecure-registry --key cosign.pub ${imageWithIp}
+                            """
+
+                            echo "Image signature verified successfully."
                         }
                     }
                 }
+            }
+        }
         // --- END OF NEW STAGE ---
-
 
 
         // --- Deploy to Kubernetes Stage ---
