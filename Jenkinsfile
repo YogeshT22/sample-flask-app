@@ -112,34 +112,35 @@ pipeline {
 
     // --- NEW STAGE FOR IMAGE SIGNING ---
         stage('Image Signing') {
-            steps {
-                script {
+                    steps {
+                        script {
+                            def imageDigest = env.IMAGE_DIGEST
 
-                    def imageDigest = env.IMAGE_DIGEST
+                            withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
+                                withEnv([
+                                    "COSIGN_PASSWORD=testpassword123",
+                                    "COSIGN_INSECURE_REGISTRY=true"
+                                ]) {
+                                    // FIX: Added --yes to skip confirmation prompt
+                                    // FIX: Added --tlog-upload=false to stop it from trying to contact public Rekor server
+                                    // FIX: Kept --allow-insecure-registry
+                                    sh '''
+                                    cosign sign --yes --allow-insecure-registry --tlog-upload=false --key $COSIGN_PRIVATE_KEY $IMAGE_DIGEST
+                                    '''
 
-                    withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
+                                    echo "Image signed successfully."
 
-                        withEnv([
-                            "COSIGN_PASSWORD=testpassword123",
-                            "COSIGN_INSECURE_REGISTRY=true"
-                        ]) {
+                                    // FIX: verification also needs the insecure flags
+                                    sh '''
+                                    cosign verify --allow-insecure-registry --key cosign.pub $IMAGE_DIGEST
+                                    '''
 
-                            sh '''
-                            cosign sign --allow-insecure-registry --key $COSIGN_PRIVATE_KEY $IMAGE_DIGEST
-                            '''
-
-                            echo "Image signed successfully."
-
-                            sh '''
-                            cosign verify --allow-insecure-registry --key cosign.pub $IMAGE_DIGEST
-                            '''
-
-                            echo "Image signature verified successfully."
+                                    echo "Image signature verified successfully."
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
         // --- END OF NEW STAGE ---
 
 
