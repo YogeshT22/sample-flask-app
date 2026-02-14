@@ -109,23 +109,24 @@ pipeline {
                 script {
 
                     def imageTag = "build-${BUILD_NUMBER}"
-                    def cosignImage = "registry://local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
+                    def cosignImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
 
                     withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
 
                         withEnv([
                             "COSIGN_PASSWORD=testpassword123",
-                            "COSIGN_EXPERIMENTAL=1"
+                            "COSIGN_EXPERIMENTAL=true",
+                            "DOCKER_REGISTRY_INSECURE=true"
                         ]) {
 
                             sh """
-                            cosign sign --key \$COSIGN_PRIVATE_KEY --allow-insecure-registry ${cosignImage}
+                            cosign sign --key \$COSIGN_PRIVATE_KEY ${cosignImage}
                             """
 
                             echo "Image signed successfully."
 
                             sh """
-                            cosign verify --key cosign.pub --allow-insecure-registry ${cosignImage}
+                            cosign verify --key cosign.pub ${cosignImage}
                             """
 
                             echo "Image signature verified successfully!"
