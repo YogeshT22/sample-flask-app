@@ -67,11 +67,6 @@ pipeline {
                 // FIX: change to kubeconfig-sa from kubeconfig-k3d (Dev).
                 withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
                     script {
-
-                    // Dev note: Ensure kubectl is available and executable in the Jenkins container.
-                        echo "Ensuring kubectl is executable..."
-                        sh "chmod +x /usr/local/bin/kubectl"
-
                         def imageTag = "build-${BUILD_NUMBER}"
                         def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
 
