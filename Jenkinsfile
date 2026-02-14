@@ -122,7 +122,9 @@ pipeline {
                         // The COSIGN_PASSWORD will be set as an environment variable in Jenkins
                         // for now, we will use a dummy password for local testing
                         withEnv(["COSIGN_PASSWORD=testpassword123"]) {
-                            sh "cosign sign --key ${COSIGN_PRIVATE_KEY} ${fullImageName}"
+                            sh '''
+                            cosign sign --key ${COSIGN_PRIVATE_KEY} ${fullImageName}
+                            '''
                             echo "Image signed successfully."
                             // You would typically verify the signature here as well.
                         // --- ADD THIS NEW STEP: Verification ---
@@ -130,7 +132,9 @@ pipeline {
                             // We need the public key to verify. For a real pipeline, this would be a secret too.
                             // For local, we will mount it or assume it's in the workspace.
                             // Let's assume you've copied cosign.pub to your app's root folder for now.
-                            sh "cosign verify --key cosign.pub ${fullImageName}"
+                            sh '''
+                            cosign verify --key cosign.pub ${fullImageName}
+                            '''
                             echo "Image signature verified successfully!"
                             // --- END OF NEW STEP ---
                         }
