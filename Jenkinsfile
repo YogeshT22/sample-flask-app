@@ -115,7 +115,8 @@ pipeline {
 
                         withEnv([
                             "COSIGN_PASSWORD=testpassword123",
-                            "COSIGN_INSECURE_REGISTRY=true"
+                            "COSIGN_EXPERIMENTAL=true",
+                            "COSIGN_REPOSITORY=local-docker-registry:5000/${IMAGE_NAME}"
                         ]) {
 
                             sh """
