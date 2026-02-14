@@ -60,6 +60,14 @@ pipeline {
 
                     docker.image(fullImageName).push()
 
+                    def digest = sh(
+                        script: "docker inspect --format='{{index .RepoDigests 0}}' ${fullImageName}",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Captured digest: ${digest}"
+
+                    env.IMAGE_DIGEST = digest.replace("localhost:5000", "local-docker-registry:5000")
                 }
             }
         }
@@ -105,31 +113,25 @@ pipeline {
     // --- NEW STAGE FOR IMAGE SIGNING ---
         stage('Image Signing') {
             steps {
-                echo "Signing Docker image with Cosign..."
                 script {
 
-                    def imageTag = "build-${BUILD_NUMBER}"
-                    def cosignImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
+                    def imageDigest = env.IMAGE_DIGEST
 
                     withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
 
-                        withEnv([
-                            "COSIGN_PASSWORD=testpassword123",
-                            "COSIGN_EXPERIMENTAL=true",
-                            "DOCKER_REGISTRY_INSECURE=true"
-                        ]) {
+                        withEnv(["COSIGN_PASSWORD=testpassword123"]) {
 
                             sh """
-                            cosign sign --key \$COSIGN_PRIVATE_KEY ${cosignImage}
+                            cosign sign --key \$COSIGN_PRIVATE_KEY --allow-insecure-registry ${imageDigest}
                             """
 
                             echo "Image signed successfully."
 
                             sh """
-                            cosign verify --key cosign.pub ${cosignImage}
+                            cosign verify --key cosign.pub --allow-insecure-registry ${imageDigest}
                             """
 
-                            echo "Image signature verified successfully!"
+                            echo "Image signature verified successfully."
                         }
                     }
                 }
