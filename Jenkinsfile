@@ -109,26 +109,20 @@ pipeline {
                 script {
 
                     def imageTag = "build-${BUILD_NUMBER}"
-                    // CRITICAL FIX: Use the Docker Compose service name for network communication
                     def cosignImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
 
                     withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
 
                         withEnv([
-                            "COSIGN_PASSWORD=testpassword123"
-                            // CRITICAL FIX: COSIGN_EXPERIMENTAL and COSIGN_REPOSITORY are NOT needed here.
-                            // --allow-insecure-registry handles the trust, and the hostname is correct.
+                            "COSIGN_PASSWORD=testpassword123",
+                            "COSIGN_EXPERIMENTAL=1"
                         ]) {
-
-                            echo "Running cosign sign..."
 
                             sh """
                             cosign sign --key \$COSIGN_PRIVATE_KEY --allow-insecure-registry ${cosignImage}
                             """
 
                             echo "Image signed successfully."
-
-                            echo "Verifying image signature..."
 
                             sh """
                             cosign verify --key cosign.pub --allow-insecure-registry ${cosignImage}
