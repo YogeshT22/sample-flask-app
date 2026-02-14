@@ -51,7 +51,7 @@ pipeline {
                     // We will allow the build to continue even if vulnerabilities are found for now
                     // The goal is to see a CORRECT report first.
                     echo "Running Trivy scan... (non-blocking)"
-                    //sh "trivy image --severity HIGH,CRITICAL --no-progress ${fullImageName}"
+                    sh "trivy image --severity HIGH,CRITICAL --no-progress ${fullImageName}"
                 }
             }
         }
