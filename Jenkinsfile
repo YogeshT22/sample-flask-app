@@ -120,13 +120,13 @@ pipeline {
                         ]) {
 
                             sh """
-                            cosign sign --key \$COSIGN_PRIVATE_KEY ${cosignImage}
+                            cosign sign --key \$COSIGN_PRIVATE_KEY --allow-insecure-registry ${cosignImage}
                             """
 
                             echo "Image signed successfully."
 
                             sh """
-                            cosign verify --key cosign.pub ${cosignImage}
+                            cosign verify --key cosign.pub --allow-insecure-registry ${cosignImage}
                             """
 
                             echo "Image signature verified successfully!"
