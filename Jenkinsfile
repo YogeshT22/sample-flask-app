@@ -121,7 +121,8 @@ pipeline {
 
                         withEnv([
                             "COSIGN_PASSWORD=testpassword123",
-                            "COSIGN_HTTP=true"
+                            "COSIGN_HTTP=true",
+                            "COSIGN_INSECURE_REGISTRY=true"
                         ]) {
 
                             sh '''
