@@ -119,17 +119,20 @@ pipeline {
 
                     withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
 
-                        withEnv(["COSIGN_PASSWORD=testpassword123"]) {
+                        withEnv([
+                            "COSIGN_PASSWORD=testpassword123",
+                            "COSIGN_HTTP=true"
+                        ]) {
 
-                            sh """
-                            cosign sign --key \$COSIGN_PRIVATE_KEY --allow-insecure-registry ${imageDigest}
-                            """
+                            sh '''
+                            cosign sign --key $COSIGN_PRIVATE_KEY $IMAGE_DIGEST
+                            '''
 
                             echo "Image signed successfully."
 
-                            sh """
-                            cosign verify --key cosign.pub --allow-insecure-registry ${imageDigest}
-                            """
+                            sh '''
+                            cosign verify --key cosign.pub $IMAGE_DIGEST
+                            '''
 
                             echo "Image signature verified successfully."
                         }
