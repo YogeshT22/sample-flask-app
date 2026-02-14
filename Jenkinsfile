@@ -67,6 +67,11 @@ pipeline {
                 // FIX: change to kubeconfig-sa from kubeconfig-k3d (Dev).
                 withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
                     script {
+
+                        // Ensure the kubectl binary we mounted is executable
+                        echo "Setting execute permissions on kubectl..."
+                        sh "chmod +x /usr/local/bin/kubectl"
+
                         def imageTag = "build-${BUILD_NUMBER}"
                         def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
 
