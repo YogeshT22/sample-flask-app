@@ -29,12 +29,33 @@ pipeline {
                     def imageTag = "build-${BUILD_NUMBER}" // so we calculate image tag using build number
                     def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}" // we calculate full image name with tag
 
-                    docker.build(fullImageName, '.')
+                     // Force a clean build with no cache to ensure all layers are fresh
+                    echo "Building with --no-cache to guarantee fresh dependencies..."
+                    docker.build(fullImageName, "--no-cache .")
+
+                     // Push the image to the local registry
 
                     docker.image(fullImageName).push()
+
                 }
             }
         }
+        // --- NEW Trivy FOR SECURITY SCAN ---
+        stage('Security Scan') {
+            steps {
+                echo "Scanning Docker image for vulnerabilities..."
+                script {
+                    def imageTag = "build-${BUILD_NUMBER}"
+                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+
+                    // We will allow the build to continue even if vulnerabilities are found for now
+                    // The goal is to see a CORRECT report first.
+                    echo "Running Trivy scan... (non-blocking)"
+                    sh "trivy image --severity HIGH,CRITICAL --no-progress ${fullImageName}"
+                }
+            }
+        }
+        // --- END OF Trivy STAGE ---
 
         stage('Deploy to Kubernetes') {
             steps {
