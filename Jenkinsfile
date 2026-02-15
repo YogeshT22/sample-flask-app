@@ -33,6 +33,7 @@ pipeline {
                 sh "trivy fs --scanners secret --no-progress ."
             }
         }
+    }
         // --- END OF NEW STAGE ---
 
         // // --- Dependency Scan STAGE ---
@@ -250,5 +251,3 @@ pipeline {
             }
         }
     }
-}
-}
