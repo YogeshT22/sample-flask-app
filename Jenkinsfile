@@ -129,7 +129,7 @@ stage('Image Signing') {
                         sh "sed -i 's|image:.*|image: ${k8sImage}|' k8s/deployment.yaml"
 
                         echo 'Applying manifest...'
-                        sh 'kubectl apply -f k8s/'
+                        sh "kubectl apply --insecure-skip-tls-verify=true -f k8s/"
                         sh "sed -i 's|image:.*|image: ${k8sImage}|' k8s/deployment.yaml"
                     }
                 }
