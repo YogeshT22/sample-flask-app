@@ -7,8 +7,8 @@ pipeline {
     agent any
 
     environment {
-       // REGISTRY_URL = 'https://localhost:5000'
-        REGISTRY_URL = 'https://local-docker-registry:5000'
+
+        REGISTRY_URL = 'https://localhost:5000'
 
         IMAGE_NAME = 'sample-flask-app'
 
@@ -52,18 +52,18 @@ pipeline {
             steps {
                 script {
                     def imageTag = "build-${BUILD_NUMBER}"
-                    // Docker tags do NOT include 'https://'
-                    def dockerTag = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
+                    // 1. The tag used for local docker commands (NO https://)
+                    def dockerTag = "localhost:5000/${IMAGE_NAME}:${imageTag}"
 
                     echo "Building: ${dockerTag}"
                     docker.build(dockerTag, "--no-cache .")
 
-                    // The 'push' command handles the HTTPS protocol automatically because of our CA trust
+                    // 2. The registry URL used for the actual upload (HAS https://)
                     docker.withRegistry("${REGISTRY_URL}") {
                         docker.image(dockerTag).push()
                     }
 
-                    // Capture Digest for Signing
+                    // 3. Capture the digest
                     def digest = sh(script: "docker inspect --format='{{index .RepoDigests 0}}' ${dockerTag}", returnStdout: true).trim()
                     env.IMAGE_DIGEST = digest
                 }
@@ -157,14 +157,12 @@ pipeline {
         stage('Image Signing') {
             steps {
                 script {
-                    // This pulls the file and the password from the Jenkins vault
                     withCredentials([
                         file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY'),
                         string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
                     ]) {
-                        echo "Signing image: ${env.IMAGE_DIGEST}"
+                        echo "Signing image digest: ${env.IMAGE_DIGEST}"
 
-                        // We use the variables defined above
                         sh """
                         export COSIGN_PASSWORD=${COSIGN_PASSWORD}
                         cosign sign --yes --tlog-upload=false --key ${COSIGN_PRIVATE_KEY} ${env.IMAGE_DIGEST}
@@ -177,51 +175,71 @@ pipeline {
             }
         }
 
-
         // --- Deploy to Kubernetes Stage ---
-        stage('Deploy to Kubernetes') {
-            steps {
-                echo 'Deploying to the K3s cluster!'
+    //     stage('Deploy to Kubernetes') {
+    //         steps {
+    //             echo 'Deploying to the K3s cluster!'
 
-                // REMINDER: This 'withCredentials' block is the key to secure access
-                // Dev note: It makes the 'kubeconfig-k3d' secret file available as a temp file
-                // and sets the KUBECONFIG environment variable to its path.
-                // FIX: change to kubeconfig-sa from kubeconfig-k3d (Dev).
+    //             // REMINDER: This 'withCredentials' block is the key to secure access
+    //             // Dev note: It makes the 'kubeconfig-k3d' secret file available as a temp file
+    //             // and sets the KUBECONFIG environment variable to its path.
+    //             // FIX: change to kubeconfig-sa from kubeconfig-k3d (Dev).
+    //             withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
+    //                 script {
+
+    //                     // Ensure the kubectl binary we mounted is executable
+    //                     echo "Setting execute permissions on kubectl..."
+    //                     sh "chmod +x /usr/local/bin/kubectl"
+
+    //                     def imageTag = "build-${BUILD_NUMBER}"
+    //                     def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+
+    //                     echo "Updating Kubernetes deployment with new image: ${fullImageName}"
+
+    //                     // Dev note: dynamically update the image in our deployment manifest.
+    //                     // Dev note: for demo 'sed' is ok, but i should use kubectl set image or Helm in future release.
+
+    //                     sh "sed -i 's|image:.*|image: ${fullImageName}|' k8s/deployment.yaml"
+
+    //                     echo 'Applying the new configuration to the cluster!'
+
+    //                     // Dev note: '--insecure-skip-tls-verify' flag is used to bypass TLS verification.
+    //                     // WARNING: This is not for prod env (DEV)
+
+    //                     // here, kubelet on the cluster's worker node instructs the underlying container runtime (using Docker) to pull the image from the registry and create a new container (a Pod) from that image.
+
+    //                     //sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
+    //                     sh 'kubectl apply -f k8s/'
+
+    //                     echo 'Waiting for the deployment to complete!'
+    //                     sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+    // // --- END OF Deploy to Kubernetes Stage ---
+
+    stage('Deploy to Kubernetes') {
+            steps {
                 withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
                     script {
-
-                        // Ensure the kubectl binary we mounted is executable
-                        echo "Setting execute permissions on kubectl..."
-                        sh "chmod +x /usr/local/bin/kubectl"
-
                         def imageTag = "build-${BUILD_NUMBER}"
-                        def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+                        // 1. MUST NOT HAVE HTTPS. Only the registry hostname.
+                        def k8sImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
 
-                        echo "Updating Kubernetes deployment with new image: ${fullImageName}"
+                        echo "Updating deployment with image: ${k8sImage}"
 
-                        // Dev note: dynamically update the image in our deployment manifest.
-                        // Dev note: for demo 'sed' is ok, but i should use kubectl set image or Helm in future release.
+                        // 2. Update the manifest
+                        sh "sed -i 's|image:.*|image: ${k8sImage}|' k8s/deployment.yaml"
 
-                        sh "sed -i 's|image:.*|image: ${fullImageName}|' k8s/deployment.yaml"
-
-                        echo 'Applying the new configuration to the cluster!'
-
-                        // Dev note: '--insecure-skip-tls-verify' flag is used to bypass TLS verification.
-                        // WARNING: This is not for prod env (DEV)
-
-                        // here, kubelet on the cluster's worker node instructs the underlying container runtime (using Docker) to pull the image from the registry and create a new container (a Pod) from that image.
-
-                        //sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
+                        echo 'Applying manifest...'
                         sh 'kubectl apply -f k8s/'
-
-                        echo 'Waiting for the deployment to complete!'
-                        sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
+                        sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME}"
                     }
                 }
             }
         }
-    }
-    // --- END OF Deploy to Kubernetes Stage ---
     // --- NEW STAGE FOR CLEANUP ---
 
     post {
