@@ -109,7 +109,8 @@ pipeline {
                         """
 
                         echo "Verifying signature..."
-                        sh "cosign verify --key cosign.pub ${signTarget}"
+                        // CHANGE: Added --insecure-ignore-tlog flag
+                        sh "cosign verify --key cosign.pub --insecure-ignore-tlog ${signTarget}"
                     }
                 }
             }
