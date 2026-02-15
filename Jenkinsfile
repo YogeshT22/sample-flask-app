@@ -92,14 +92,13 @@ pipeline {
         }
         // --- END OF SBOM STAGE ---
 
-        stage('Image Signing') {
+stage('Image Signing') {
             steps {
                 script {
                     withCredentials([
                         file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY'),
                         string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
                     ]) {
-                        // Switch to internal container name for Cosign inside Jenkins network
                         def signTarget = env.IMAGE_DIGEST.replace("localhost:5000", "local-docker-registry:5000")
                         echo "Signing image digest: ${signTarget}"
 
