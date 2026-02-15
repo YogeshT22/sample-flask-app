@@ -130,7 +130,7 @@ stage('Image Signing') {
 
                         echo 'Applying manifest...'
                         sh 'kubectl apply -f k8s/'
-                        sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME}"
+                        sh "sed -i 's|image:.*|image: ${k8sImage}|' k8s/deployment.yaml"
                     }
                 }
             }
