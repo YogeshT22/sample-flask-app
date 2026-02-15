@@ -7,11 +7,8 @@ pipeline {
     agent any
 
     environment {
-
         REGISTRY_URL = 'https://localhost:5000'
-
         IMAGE_NAME = 'sample-flask-app'
-
         K8S_NAMESPACE = 'default'
         K8S_DEPLOYMENT_NAME = 'flask-app-deployment'
     }
@@ -33,20 +30,7 @@ pipeline {
                 sh "trivy fs --scanners secret --no-progress ."
             }
         }
-    }
         // --- END OF NEW STAGE ---
-
-        // // --- Dependency Scan STAGE ---
-
-        // stage('Dependency Scan') {
-        //     steps {
-        //         echo "Scanning application dependencies for vulnerabilities..."
-        //         // Use Trivy to scan the filesystem, focusing on the requirements.txt
-        //         // We'll keep it non-blocking for now to see the report.
-        //         sh "trivy fs --severity HIGH,CRITICAL --no-progress ."
-        //     }
-        // }
-        // // --- END OF Dependency Scan STAGE ---
 
         // --- Build and Push Stage ---
         stage('Build and Push') {
@@ -57,11 +41,11 @@ pipeline {
                     def dockerTag = "localhost:5000/${IMAGE_NAME}:${imageTag}"
 
                     echo "Building: ${dockerTag}"
-                    docker.build(dockerTag, "--no-cache .")
+                    sh "docker build -t ${dockerTag} --no-cache ."
 
                     // 2. The registry URL used for the actual upload (HAS https://)
                     docker.withRegistry("${REGISTRY_URL}") {
-                        docker.image(dockerTag).push()
+                        sh "docker push ${dockerTag}"
                     }
 
                     // 3. Capture the digest
@@ -78,13 +62,11 @@ pipeline {
                 echo "Scanning Docker image for vulnerabilities..."
                 script {
                     def imageTag = "build-${BUILD_NUMBER}"
-                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+                    // Trivy needs to talk to the internal container name
+                    def internalImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
 
-                    // We will allow the build to continue even if vulnerabilities are found for now
-                    // The goal is to see a CORRECT report first.
                     echo "Running Trivy scan... (non-blocking)"
-                    sh "trivy image --severity HIGH,CRITICAL --no-progress ${fullImageName}"
-                    //sh "trivy image --severity HIGH,CRITICAL --exit-code 1 --no-progress ${fullImageName}" // Uncomment this line to make the build fail on vulnerabilities (DEV).
+                    sh "trivy image --severity HIGH,CRITICAL --no-progress ${internalImage}"
                 }
             }
         }
@@ -96,64 +78,19 @@ pipeline {
                 echo "Generating Software Bill of Materials (SBOM) for the image..."
                 script {
                     def imageTag = "build-${BUILD_NUMBER}"
-                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
+                    def internalImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
                     def sbomFileName = "${IMAGE_NAME}-${imageTag}-sbom.json"
 
                     // Use Trivy to generate the SBOM in CycloneDX JSON format
-                    // Save the SBOM as a build artifact in the workspace
-                    sh "trivy image --format cyclonedx --output ${sbomFileName} ${fullImageName}"
+                    sh "trivy image --format cyclonedx --output ${sbomFileName} ${internalImage}"
 
-                    // Archive the SBOM file in Jenkins, so it's accessible after the build.
+                    // Archive the SBOM file in Jenkins
                     archiveArtifacts artifacts: sbomFileName, fingerprint: true
                     echo "SBOM generated and archived: ${sbomFileName}"
                 }
             }
         }
         // --- END OF SBOM STAGE ---
-
-// // --- NEW STAGE FOR IMAGE SIGNING ---
-//         stage('Image Signing') {
-//             steps {
-//                 script {
-//                     withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-//                         withEnv(["COSIGN_PASSWORD=testpassword123"]) { // Removed COSIGN_INSECURE_REGISTRY env, relying on flag
-
-//                             // 1. Resolve the IP address of the registry container
-//                             // This bypasses the "hostname means HTTPS" assumption in Cosign
-//                             def registryIp = sh(
-//                                 script: "getent hosts local-docker-registry | awk '{ print \$1 }'",
-//                                 returnStdout: true
-//                             ).trim()
-
-//                             echo "Registry IP resolved to: ${registryIp}"
-
-//                             // 2. Reconstruct the image reference using the IP
-//                             // We grab the digest part (sha256:...) from the original env var
-//                             def digestOnly = env.IMAGE_DIGEST.split('@')[1]
-//                             def imageWithIp = "${registryIp}:5000/sample-flask-app@${digestOnly}"
-
-//                             echo "Signing image via IP: ${imageWithIp}"
-
-//                             // 3. Sign using the IP address
-//                             sh """
-//                             cosign sign --yes --tlog-upload=false --key \$COSIGN_PRIVATE_KEY ${imageWithIp}
-//                             """
-
-//                             echo "Image signed successfully."
-
-//                             // 4. Verify using the IP address
-//                         // FIX: Added --insecure-ignore-tlog so it doesn't fail looking for the log entry we never uploaded.
-//                             sh """
-//                             cosign verify --key cosign.pub ${imageWithIp}
-//                             """
-
-//                             echo "Image signature verified successfully."
-//                         }
-//                     }
-//                 }
-//             }
-//         }
-//         // --- END OF NEW STAGE ---
 
         stage('Image Signing') {
             steps {
@@ -162,66 +99,23 @@ pipeline {
                         file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY'),
                         string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
                     ]) {
-                        echo "Signing image digest: ${env.IMAGE_DIGEST}"
+                        // Switch to internal container name for Cosign inside Jenkins network
+                        def signTarget = env.IMAGE_DIGEST.replace("localhost:5000", "local-docker-registry:5000")
+                        echo "Signing image digest: ${signTarget}"
 
                         sh """
                         export COSIGN_PASSWORD=${COSIGN_PASSWORD}
-                        cosign sign --yes --tlog-upload=false --key ${COSIGN_PRIVATE_KEY} ${env.IMAGE_DIGEST}
+                        cosign sign --yes --tlog-upload=false --key ${COSIGN_PRIVATE_KEY} ${signTarget}
                         """
 
                         echo "Verifying signature..."
-                        sh "cosign verify --key cosign.pub ${env.IMAGE_DIGEST}"
+                        sh "cosign verify --key cosign.pub ${signTarget}"
                     }
                 }
             }
         }
 
-        // --- Deploy to Kubernetes Stage ---
-    //     stage('Deploy to Kubernetes') {
-    //         steps {
-    //             echo 'Deploying to the K3s cluster!'
-
-    //             // REMINDER: This 'withCredentials' block is the key to secure access
-    //             // Dev note: It makes the 'kubeconfig-k3d' secret file available as a temp file
-    //             // and sets the KUBECONFIG environment variable to its path.
-    //             // FIX: change to kubeconfig-sa from kubeconfig-k3d (Dev).
-    //             withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
-    //                 script {
-
-    //                     // Ensure the kubectl binary we mounted is executable
-    //                     echo "Setting execute permissions on kubectl..."
-    //                     sh "chmod +x /usr/local/bin/kubectl"
-
-    //                     def imageTag = "build-${BUILD_NUMBER}"
-    //                     def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}"
-
-    //                     echo "Updating Kubernetes deployment with new image: ${fullImageName}"
-
-    //                     // Dev note: dynamically update the image in our deployment manifest.
-    //                     // Dev note: for demo 'sed' is ok, but i should use kubectl set image or Helm in future release.
-
-    //                     sh "sed -i 's|image:.*|image: ${fullImageName}|' k8s/deployment.yaml"
-
-    //                     echo 'Applying the new configuration to the cluster!'
-
-    //                     // Dev note: '--insecure-skip-tls-verify' flag is used to bypass TLS verification.
-    //                     // WARNING: This is not for prod env (DEV)
-
-    //                     // here, kubelet on the cluster's worker node instructs the underlying container runtime (using Docker) to pull the image from the registry and create a new container (a Pod) from that image.
-
-    //                     //sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
-    //                     sh 'kubectl apply -f k8s/'
-
-    //                     echo 'Waiting for the deployment to complete!'
-    //                     sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-    // // --- END OF Deploy to Kubernetes Stage ---
-
-    stage('Deploy to Kubernetes') {
+        stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
                     script {
@@ -241,8 +135,9 @@ pipeline {
                 }
             }
         }
-    // --- NEW STAGE FOR CLEANUP ---
+    }
 
+    // --- NEW STAGE FOR CLEANUP ---
     post {
         always {
             echo 'Pipeline finished.'
@@ -251,3 +146,4 @@ pipeline {
             }
         }
     }
+}
