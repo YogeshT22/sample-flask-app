@@ -7,7 +7,9 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY_URL = 'localhost:5000'
+       // REGISTRY_URL = 'https://localhost:5000'
+        REGISTRY_URL = 'https://local-docker-registry:5000'
+
         IMAGE_NAME = 'sample-flask-app'
 
         K8S_NAMESPACE = 'default'
@@ -45,32 +47,30 @@ pipeline {
         // }
         // // --- END OF Dependency Scan STAGE ---
 
-        stage('Build and Push Docker Image') {
+        // --- Build and Push Stage ---
+        stage('Build and Push') {
             steps {
-                echo 'Building and pushing the Docker image...'
                 script {
-                    def imageTag = "build-${BUILD_NUMBER}" // so we calculate image tag using build number
-                    def fullImageName = "${REGISTRY_URL}/${IMAGE_NAME}:${imageTag}" // we calculate full image name with tag
+                    def imageTag = "build-${BUILD_NUMBER}"
+                    // Docker tags do NOT include 'https://'
+                    def dockerTag = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
 
-                     // Force a clean build with no cache to ensure all layers are fresh
-                    echo "Building with --no-cache to guarantee fresh dependencies..."
-                    docker.build(fullImageName, "--no-cache .")
+                    echo "Building: ${dockerTag}"
+                    docker.build(dockerTag, "--no-cache .")
 
-                     // Push the image to the local registry
+                    // The 'push' command handles the HTTPS protocol automatically because of our CA trust
+                    docker.withRegistry("${REGISTRY_URL}") {
+                        docker.image(dockerTag).push()
+                    }
 
-                    docker.image(fullImageName).push()
-
-                    def digest = sh(
-                        script: "docker inspect --format='{{index .RepoDigests 0}}' ${fullImageName}",
-                        returnStdout: true
-                    ).trim()
-
-                    echo "Captured digest: ${digest}"
-
-                    env.IMAGE_DIGEST = digest.replace("localhost:5000", "local-docker-registry:5000")
+                    // Capture Digest for Signing
+                    def digest = sh(script: "docker inspect --format='{{index .RepoDigests 0}}' ${dockerTag}", returnStdout: true).trim()
+                    env.IMAGE_DIGEST = digest
                 }
             }
         }
+        // --- END OF Build and Push Stage ---
+
         // --- NEW Trivy FOR SECURITY SCAN ---
         stage('Security Scan - Image Vulnerabilities') {
             steps {
@@ -110,49 +110,72 @@ pipeline {
         }
         // --- END OF SBOM STAGE ---
 
-// --- NEW STAGE FOR IMAGE SIGNING ---
+// // --- NEW STAGE FOR IMAGE SIGNING ---
+//         stage('Image Signing') {
+//             steps {
+//                 script {
+//                     withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
+//                         withEnv(["COSIGN_PASSWORD=testpassword123"]) { // Removed COSIGN_INSECURE_REGISTRY env, relying on flag
+
+//                             // 1. Resolve the IP address of the registry container
+//                             // This bypasses the "hostname means HTTPS" assumption in Cosign
+//                             def registryIp = sh(
+//                                 script: "getent hosts local-docker-registry | awk '{ print \$1 }'",
+//                                 returnStdout: true
+//                             ).trim()
+
+//                             echo "Registry IP resolved to: ${registryIp}"
+
+//                             // 2. Reconstruct the image reference using the IP
+//                             // We grab the digest part (sha256:...) from the original env var
+//                             def digestOnly = env.IMAGE_DIGEST.split('@')[1]
+//                             def imageWithIp = "${registryIp}:5000/sample-flask-app@${digestOnly}"
+
+//                             echo "Signing image via IP: ${imageWithIp}"
+
+//                             // 3. Sign using the IP address
+//                             sh """
+//                             cosign sign --yes --tlog-upload=false --key \$COSIGN_PRIVATE_KEY ${imageWithIp}
+//                             """
+
+//                             echo "Image signed successfully."
+
+//                             // 4. Verify using the IP address
+//                         // FIX: Added --insecure-ignore-tlog so it doesn't fail looking for the log entry we never uploaded.
+//                             sh """
+//                             cosign verify --key cosign.pub ${imageWithIp}
+//                             """
+
+//                             echo "Image signature verified successfully."
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//         // --- END OF NEW STAGE ---
+
         stage('Image Signing') {
             steps {
                 script {
-                    withCredentials([file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                        withEnv(["COSIGN_PASSWORD=testpassword123"]) { // Removed COSIGN_INSECURE_REGISTRY env, relying on flag
+                    // This pulls the file and the password from the Jenkins vault
+                    withCredentials([
+                        file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY'),
+                        string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
+                    ]) {
+                        echo "Signing image: ${env.IMAGE_DIGEST}"
 
-                            // 1. Resolve the IP address of the registry container
-                            // This bypasses the "hostname means HTTPS" assumption in Cosign
-                            def registryIp = sh(
-                                script: "getent hosts local-docker-registry | awk '{ print \$1 }'",
-                                returnStdout: true
-                            ).trim()
+                        // We use the variables defined above
+                        sh """
+                        export COSIGN_PASSWORD=${COSIGN_PASSWORD}
+                        cosign sign --yes --tlog-upload=false --key ${COSIGN_PRIVATE_KEY} ${env.IMAGE_DIGEST}
+                        """
 
-                            echo "Registry IP resolved to: ${registryIp}"
-
-                            // 2. Reconstruct the image reference using the IP
-                            // We grab the digest part (sha256:...) from the original env var
-                            def digestOnly = env.IMAGE_DIGEST.split('@')[1]
-                            def imageWithIp = "${registryIp}:5000/sample-flask-app@${digestOnly}"
-
-                            echo "Signing image via IP: ${imageWithIp}"
-
-                            // 3. Sign using the IP address
-                            sh """
-                            cosign sign --yes --allow-insecure-registry --tlog-upload=false --key \$COSIGN_PRIVATE_KEY ${imageWithIp}
-                            """
-
-                            echo "Image signed successfully."
-
-                            // 4. Verify using the IP address
-                        // FIX: Added --insecure-ignore-tlog so it doesn't fail looking for the log entry we never uploaded.
-                            sh """
-                            cosign verify --allow-insecure-registry --insecure-ignore-tlog --key cosign.pub ${imageWithIp}
-                            """
-
-                            echo "Image signature verified successfully."
-                        }
+                        echo "Verifying signature..."
+                        sh "cosign verify --key cosign.pub ${env.IMAGE_DIGEST}"
                     }
                 }
             }
         }
-        // --- END OF NEW STAGE ---
 
 
         // --- Deploy to Kubernetes Stage ---
@@ -188,10 +211,11 @@ pipeline {
 
                         // here, kubelet on the cluster's worker node instructs the underlying container runtime (using Docker) to pull the image from the registry and create a new container (a Pod) from that image.
 
-                        sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
+                        //sh 'kubectl --insecure-skip-tls-verify apply -f k8s/'
+                        sh 'kubectl apply -f k8s/'
 
                         echo 'Waiting for the deployment to complete!'
-                        sh "kubectl --insecure-skip-tls-verify rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
+                        sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace ${K8S_NAMESPACE}"
                     }
                 }
             }
