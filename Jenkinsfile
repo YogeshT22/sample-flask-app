@@ -4,146 +4,144 @@
 // Using Docker Pipeline Plugin, Plugin runs the 'docker build -t ...'.
 // ---------------------------------------------
 pipeline {
-    agent any
 
-    environment {
-        REGISTRY_URL = 'https://localhost:5000'
-        IMAGE_NAME = 'sample-flask-app'
-        K8S_NAMESPACE = 'default'
-        K8S_DEPLOYMENT_NAME = 'flask-app-deployment'
-    }
+agent any
 
-    stages {
-        stage('Checkout') {
-            steps {
-                echo 'Checking out latest code from Gitea'
-                git url: 'http://gitea-server:3000/admin/sample-flask-app.git', branch: 'feature/v2.0'
-            }
-        }
+environment {
 
-        // --- ADD THIS NEW STAGE ---
-        stage('Security Scan - Hardcoded Secrets') {
-            steps {
-                echo "Scanning source code for hardcoded secrets..."
-                // Use Trivy to scan the filesystem for secrets.
-                // We will keep it non-blocking for now.
-                sh "trivy fs --scanners secret --no-progress ."
-            }
-        }
-        // --- END OF NEW STAGE ---
+    REGISTRY = 'local-docker-registry:5000'
+    IMAGE_NAME = 'sample-flask-app'
+    IMAGE_TAG = "build-${BUILD_NUMBER}"
+    FULL_IMAGE = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-        // --- Build and Push Stage ---
-        stage('Build and Push') {
-            steps {
-                script {
-                    def imageTag = "build-${BUILD_NUMBER}"
-                    // 1. The tag used for local docker commands (NO https://)
-                    def dockerTag = "localhost:5000/${IMAGE_NAME}:${imageTag}"
+    K8S_NAMESPACE = 'default'
+    K8S_DEPLOYMENT_NAME = 'flask-app-deployment'
 
-                    echo "Building: ${dockerTag}"
-                    sh "docker build -t ${dockerTag} --no-cache ."
+    GIT_REPO = 'http://gitea-server:3000/admin/sample-flask-app.git'
+    GIT_BRANCH = 'feature/v2.0'
+}
 
-                    // 2. The registry URL used for the actual upload (HAS https://)
-                    docker.withRegistry("${REGISTRY_URL}") {
-                        sh "docker push ${dockerTag}"
-                    }
+stages {
 
-                    // 3. Capture the digest
-                    def digest = sh(script: "docker inspect --format='{{index .RepoDigests 0}}' ${dockerTag}", returnStdout: true).trim()
-                    env.IMAGE_DIGEST = digest
-                }
-            }
-        }
-        // --- END OF Build and Push Stage ---
-
-        // --- NEW Trivy FOR SECURITY SCAN ---
-        stage('Security Scan - Image Vulnerabilities') {
-            steps {
-                echo "Scanning Docker image for vulnerabilities..."
-                script {
-                    def imageTag = "build-${BUILD_NUMBER}"
-                    // Trivy needs to talk to the internal container name
-                    def internalImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
-
-                    echo "Running Trivy scan... (non-blocking)"
-                    sh "trivy image --severity HIGH,CRITICAL --no-progress ${internalImage}"
-                }
-            }
-        }
-        // --- END OF Trivy STAGE ---
-
-        // SBOM (Software Bill of Materials) Generation Stage
-        stage('SBOM Generation') {
-            steps {
-                echo "Generating Software Bill of Materials (SBOM) for the image..."
-                script {
-                    def imageTag = "build-${BUILD_NUMBER}"
-                    def internalImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
-                    def sbomFileName = "${IMAGE_NAME}-${imageTag}-sbom.json"
-
-                    // Use Trivy to generate the SBOM in CycloneDX JSON format
-                    sh "trivy image --format cyclonedx --output ${sbomFileName} ${internalImage}"
-
-                    // Archive the SBOM file in Jenkins
-                    archiveArtifacts artifacts: sbomFileName, fingerprint: true
-                    echo "SBOM generated and archived: ${sbomFileName}"
-                }
-            }
-        }
-        // --- END OF SBOM STAGE ---
-
-stage('Image Signing') {
-            steps {
-                script {
-                    withCredentials([
-                        file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY'),
-                        string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
-                    ]) {
-                        def signTarget = env.IMAGE_DIGEST.replace("localhost:5000", "local-docker-registry:5000")
-                        echo "Signing image digest: ${signTarget}"
-
-                        sh """
-                        export COSIGN_PASSWORD=${COSIGN_PASSWORD}
-                        cosign sign --yes --tlog-upload=false --key ${COSIGN_PRIVATE_KEY} ${signTarget}
-                        """
-
-                        echo "Verifying signature..."
-                        // CHANGE: Added --insecure-ignore-tlog flag
-                        sh "cosign verify --key cosign.pub --insecure-ignore-tlog ${signTarget}"
-                    }
-                }
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                withCredentials([file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')]) {
-                    script {
-                        def imageTag = "build-${BUILD_NUMBER}"
-                        // 1. MUST NOT HAVE HTTPS. Only the registry hostname.
-                        def k8sImage = "local-docker-registry:5000/${IMAGE_NAME}:${imageTag}"
-
-                        echo "Updating deployment with image: ${k8sImage}"
-
-                        // 2. Update the manifest
-                        sh "sed -i 's|image:.*|image: ${k8sImage}|' k8s/deployment.yaml"
-
-                        echo 'Applying manifest...'
-                        sh "kubectl apply --insecure-skip-tls-verify=true -f k8s/"
-                        sh "sed -i 's|image:.*|image: ${k8sImage}|' k8s/deployment.yaml"
-                    }
-                }
-            }
+    stage('Checkout') {
+        steps {
+            git url: "${GIT_REPO}", branch: "${GIT_BRANCH}"
         }
     }
 
-    // --- NEW STAGE FOR CLEANUP ---
-    post {
-        always {
-            echo 'Pipeline finished.'
+    stage('Security Scan - Hardcoded Secrets') {
+        steps {
+            sh "trivy fs --scanners secret --no-progress ."
+        }
+    }
+
+    stage('Build and Push Image') {
+        steps {
             script {
-                sh 'docker image prune -f'
+
+                sh """
+                    docker build -t ${FULL_IMAGE} --no-cache .
+                    docker push ${FULL_IMAGE}
+                """
+
+                env.IMAGE_DIGEST = sh(
+                    script: "docker inspect --format='{{index .RepoDigests 0}}' ${FULL_IMAGE}",
+                    returnStdout: true
+                ).trim()
+
+                echo "Digest: ${IMAGE_DIGEST}"
             }
         }
     }
+
+    stage('Security Scan - Image Vulnerabilities') {
+        steps {
+            sh """
+                trivy image \
+                --severity HIGH,CRITICAL \
+                --no-progress \
+                ${FULL_IMAGE}
+            """
+        }
+    }
+
+    stage('Generate SBOM') {
+        steps {
+            script {
+
+                def sbomFile = "${IMAGE_NAME}-${IMAGE_TAG}-sbom.json"
+
+                sh """
+                    trivy image \
+                    --format cyclonedx \
+                    --output ${sbomFile} \
+                    ${FULL_IMAGE}
+                """
+
+                archiveArtifacts artifacts: sbomFile, fingerprint: true
+            }
+        }
+    }
+
+    stage('Sign and Verify Image') {
+
+        steps {
+
+            script {
+
+                withCredentials([
+                    file(credentialsId: 'cosign-private-key', variable: 'COSIGN_PRIVATE_KEY'),
+                    string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
+                ]) {
+
+                    sh """
+                        export COSIGN_PASSWORD=$COSIGN_PASSWORD
+                        cosign sign \
+                            --yes \
+                            --tlog-upload=false \
+                            --key $COSIGN_PRIVATE_KEY \
+                            ${IMAGE_DIGEST}
+                    """
+
+                    sh """
+                        cosign verify \
+                            --key cosign.pub \
+                            --insecure-ignore-tlog \
+                            ${IMAGE_DIGEST}
+                    """
+                }
+            }
+        }
+    }
+
+    stage('Deploy to Kubernetes') {
+
+        steps {
+
+            withCredentials([
+                file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')
+            ]) {
+
+                sh """
+                    sed -i 's|image:.*|image: ${IMAGE_DIGEST}|' k8s/deployment.yaml
+                """
+
+                sh """
+                    kubectl apply \
+                        --insecure-skip-tls-verify=true \
+                        -n ${K8S_NAMESPACE} \
+                        -f k8s/
+                """
+            }
+        }
+    }
+}
+
+post {
+
+    always {
+        sh "docker image prune -f"
+    }
+
+}
 }
