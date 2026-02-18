@@ -18,7 +18,7 @@ environment {
     K8S_DEPLOYMENT_NAME = 'flask-app-deployment'
 
     GIT_REPO = 'http://gitea-server:3000/admin/sample-flask-app.git'
-    GIT_BRANCH = 'feature/v2.0'
+    GIT_BRANCH = 'main'
 }
 
 stages {
