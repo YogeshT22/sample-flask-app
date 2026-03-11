@@ -181,7 +181,9 @@ post {
 
     failure {
         echo "Pipeline FAILED at build: ${BUILD_NUMBER}. Check logs above."
-    }    always {
+    }
+
+    always {
         // Clean up dangling images to save disk space.
         // '|| true' prevents a docker socket permission error from masking the real build result.
         sh "docker image prune -f || true"
