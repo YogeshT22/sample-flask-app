@@ -29,9 +29,11 @@ COPY --from=builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
 # Copy application
 COPY app.py .
 
-# Create non-root user (production security hardening)
-RUN useradd -m appuser
-USER appuser
+# Create non-root user with explicit UID=1001
+# Numeric UID is required for Kubernetes runAsNonRoot enforcement —
+# K8s validates by UID at admission time, not by username string.
+RUN useradd -u 1001 -m appuser
+USER 1001
 
 EXPOSE 5000
 

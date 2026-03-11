@@ -58,10 +58,22 @@ spec:
             periodSeconds: 20
             failureThreshold: 3
           # Security: run as non-root, read-only filesystem
+          # runAsUser/runAsGroup must match UID in Dockerfile (1001)
+          # K8s runAsNonRoot validates by UID — numeric value is mandatory
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
             readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+          # Gunicorn needs /tmp for worker temp files even with readOnlyRootFilesystem
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+      # emptyDir volumes satisfy readOnlyRootFilesystem by providing writable tmpfs
+      volumes:
+        - name: tmp-dir
+          emptyDir: {}
