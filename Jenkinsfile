@@ -1,7 +1,12 @@
 // ---------------------------------------------
-// This is a Jenkins pipeline script for a sample Flask application.
-// This is a personal project to demonstrate a complete CI/CD pipeline using Gitea, Jenkins, Docker, and Kubernetes.
-// Using Docker Pipeline Plugin, Plugin runs the 'docker build -t ...'.
+// Jenkins Pipeline - Sample Flask Application
+// DevSecOps platform: Gitea -> Jenkins -> Docker -> Kubernetes
+// Production practices:
+//   - Trivy scans FAIL the build on HIGH/CRITICAL findings
+//   - TLS verification enabled on kubectl (no --insecure-skip-tls-verify)
+//   - Image deployed by immutable SHA256 digest
+//   - Rollout status verified after deploy
+//   - Workspace cleaned up on every run
 // ---------------------------------------------
 pipeline {
 
@@ -9,15 +14,15 @@ agent any
 
 environment {
 
-    REGISTRY = 'local-docker-registry:5000'
-    IMAGE_NAME = 'sample-flask-app'
-    IMAGE_TAG = "build-${BUILD_NUMBER}"
-    FULL_IMAGE = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+    REGISTRY         = 'local-docker-registry:5000'
+    IMAGE_NAME       = 'sample-flask-app'
+    IMAGE_TAG        = "build-${BUILD_NUMBER}"
+    FULL_IMAGE       = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-    K8S_NAMESPACE = 'default'
-    K8S_DEPLOYMENT_NAME = 'flask-app-deployment'
+    K8S_NAMESPACE        = 'default'
+    K8S_DEPLOYMENT_NAME  = 'flask-app-deployment'
 
-    GIT_REPO = 'http://gitea-server:3000/admin/sample-flask-app.git'
+    GIT_REPO   = 'http://gitea-server:3000/admin/sample-flask-app.git'
     GIT_BRANCH = 'main'
 }
 
@@ -29,9 +34,18 @@ stages {
         }
     }
 
+    // ------------------------------------------------------------------
+    // SECRET SCAN: fails the build if hardcoded secrets are found
+    // ------------------------------------------------------------------
     stage('Security Scan - Hardcoded Secrets') {
         steps {
-            sh "trivy fs --scanners secret --no-progress ."
+            sh """
+                trivy fs \
+                    --scanners secret \
+                    --exit-code 1 \
+                    --no-progress \
+                    .
+            """
         }
     }
 
@@ -49,18 +63,22 @@ stages {
                     returnStdout: true
                 ).trim()
 
-                echo "Digest: ${IMAGE_DIGEST}"
+                echo "Image digest: ${IMAGE_DIGEST}"
             }
         }
     }
 
+    // ------------------------------------------------------------------
+    // VULNERABILITY SCAN: --exit-code 1 makes pipeline FAIL on findings
+    // ------------------------------------------------------------------
     stage('Security Scan - Image Vulnerabilities') {
         steps {
             sh """
                 trivy image \
-                --severity HIGH,CRITICAL \
-                --no-progress \
-                ${FULL_IMAGE}
+                    --severity HIGH,CRITICAL \
+                    --exit-code 1 \
+                    --no-progress \
+                    ${FULL_IMAGE}
             """
         }
     }
@@ -73,9 +91,9 @@ stages {
 
                 sh """
                     trivy image \
-                    --format cyclonedx \
-                    --output ${sbomFile} \
-                    ${FULL_IMAGE}
+                        --format cyclonedx \
+                        --output ${sbomFile} \
+                        ${FULL_IMAGE}
                 """
 
                 archiveArtifacts artifacts: sbomFile, fingerprint: true
@@ -95,11 +113,11 @@ stages {
                 ]) {
 
                     sh """
-                        export COSIGN_PASSWORD=$COSIGN_PASSWORD
+                        export COSIGN_PASSWORD=${COSIGN_PASSWORD}
                         cosign sign \
                             --yes \
                             --tlog-upload=false \
-                            --key $COSIGN_PRIVATE_KEY \
+                            --key ${COSIGN_PRIVATE_KEY} \
                             ${IMAGE_DIGEST}
                     """
 
@@ -114,6 +132,11 @@ stages {
         }
     }
 
+    // ------------------------------------------------------------------
+    // DEPLOY: uses immutable digest, no --insecure-skip-tls-verify,
+    //         only applies app manifests (not service-account RBAC),
+    //         verifies rollout completes successfully
+    // ------------------------------------------------------------------
     stage('Deploy to Kubernetes') {
 
         steps {
@@ -121,17 +144,30 @@ stages {
             withCredentials([
                 file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')
             ]) {
+                script {
 
-                sh """
-                    sed -i 's|image:.*|image: ${IMAGE_DIGEST}|' k8s/deployment.yaml
-                """
+                    // Patch only the container image line precisely - avoid broad sed match
+                    sh """
+                        kubectl set image deployment/${K8S_DEPLOYMENT_NAME} \
+                            flask-app-container=${IMAGE_DIGEST} \
+                            -n ${K8S_NAMESPACE}
+                    """
 
-                sh """
-                    kubectl apply \
-                        --insecure-skip-tls-verify=true \
-                        -n ${K8S_NAMESPACE} \
-                        -f k8s/
-                """
+                    // Apply only service and ingress - RBAC is applied separately, not on every deploy
+                    sh """
+                        kubectl apply \
+                            -n ${K8S_NAMESPACE} \
+                            -f k8s/service.yaml \
+                            -f k8s/ingress.yaml
+                    """
+
+                    // Wait for rollout to complete - fails the build if pods don't come up
+                    sh """
+                        kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} \
+                            -n ${K8S_NAMESPACE} \
+                            --timeout=120s
+                    """
+                }
             }
         }
     }
@@ -139,8 +175,18 @@ stages {
 
 post {
 
-    always {
-        sh "docker image prune -f"
+    success {
+        echo "Pipeline succeeded. Build: ${BUILD_NUMBER} | Image: ${IMAGE_DIGEST}"
+    }
+
+    failure {
+        echo "Pipeline FAILED at build: ${BUILD_NUMBER}. Check logs above."
+    }    always {
+        // Clean up dangling images to save disk space.
+        // '|| true' prevents a docker socket permission error from masking the real build result.
+        sh "docker image prune -f || true"
+        // Clean Jenkins workspace after every run
+        cleanWs()
     }
 
 }

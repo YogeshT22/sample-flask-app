@@ -23,13 +23,17 @@ WORKDIR /app
 # Copy only installed dependencies from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
+# Copy gunicorn binary from builder
+COPY --from=builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
+
 # Copy application
 COPY app.py .
 
-# Create non-root user (important security hardening)
+# Create non-root user (production security hardening)
 RUN useradd -m appuser
 USER appuser
 
 EXPOSE 5000
 
-CMD ["python", "app.py"]
+# Use gunicorn production WSGI server instead of Flask dev server
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "60", "app:app"]
