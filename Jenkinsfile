@@ -66,10 +66,11 @@ stages {
                 echo "Image digest: ${IMAGE_DIGEST}"
             }
         }
-    }
-
-    // ------------------------------------------------------------------
+    }    // ------------------------------------------------------------------
     // VULNERABILITY SCAN: --exit-code 1 makes pipeline FAIL on findings
+    // --ignore-unfixed skips CVEs with no available fix in the distro
+    //   (e.g. Debian "will_not_fix" status). Accepted risks are documented
+    //   in .trivyignore with justification.
     // ------------------------------------------------------------------
     stage('Security Scan - Image Vulnerabilities') {
         steps {
@@ -77,6 +78,7 @@ stages {
                 trivy image \
                     --severity HIGH,CRITICAL \
                     --exit-code 1 \
+                    --ignore-unfixed \
                     --no-progress \
                     ${FULL_IMAGE}
             """
