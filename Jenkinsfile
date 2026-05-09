@@ -189,30 +189,30 @@ stages {
                                         def k6PodName = "flask-app-k6-load-test-${BUILD_NUMBER}"
                                         def k6LogFile = "${IMAGE_NAME}-${IMAGE_TAG}-k6.log"
 
-                                        sh '''#!/usr/bin/env bash
+                                        sh """#!/usr/bin/env bash
 set -euo pipefail
 
-K8S_NAMESPACE=''' + K8S_NAMESPACE + '''
-k6ConfigMapName=''' + k6ConfigMapName + '''
-k6PodName=''' + k6PodName + '''
-k6LogFile=''' + k6LogFile + '''
+K8S_NAMESPACE="${K8S_NAMESPACE}"
+k6ConfigMapName="${k6ConfigMapName}"
+k6PodName="${k6PodName}"
+k6LogFile="${k6LogFile}"
 
 cleanup() {
-        kubectl delete -n "$K8S_NAMESPACE" pod/"$k6PodName" configmap/"$k6ConfigMapName" --ignore-not-found=true
+        kubectl delete -n \$K8S_NAMESPACE pod/\$k6PodName configmap/\$k6ConfigMapName --ignore-not-found=true
 }
 
 trap cleanup EXIT
 
-kubectl create configmap "$k6ConfigMapName" \
+kubectl create configmap \$k6ConfigMapName \
         --from-file=load-tests/k6-smoke.js \
-        -n "$K8S_NAMESPACE" \
+        -n \$K8S_NAMESPACE \
         --dry-run=client -o yaml | kubectl apply -f -
 
-cat <<'YAMLEOF' | kubectl apply -n "$K8S_NAMESPACE" -f -
+cat > /tmp/k6-pod.yaml <<'YAMLEOF'
 apiVersion: v1
 kind: Pod
 metadata:
-    name: ''' + k6PodName + '''
+    name: POD_NAME_PLACEHOLDER
 spec:
     restartPolicy: Never
     containers:
@@ -224,7 +224,7 @@ spec:
                 - /scripts/k6-smoke.js
             env:
                 - name: K6_BASE_URL
-                    value: http://flask-app-service.''' + K8S_NAMESPACE + '''.svc.cluster.local
+                    value: http://flask-app-service.K8S_NAMESPACE_PLACEHOLDER.svc.cluster.local
                 - name: K6_VUS
                     value: "5"
                 - name: K6_DURATION
@@ -235,16 +235,20 @@ spec:
     volumes:
         - name: k6-script
             configMap:
-                name: ''' + k6ConfigMapName + '''
+                name: CONFIGMAP_NAME_PLACEHOLDER
 YAMLEOF
 
-if ! kubectl wait -n "$K8S_NAMESPACE" --for=jsonpath='{.status.phase}'=Succeeded pod/"$k6PodName" --timeout=10m; then
-        kubectl logs -n "$K8S_NAMESPACE" pod/"$k6PodName" || true
+sed -i "s/POD_NAME_PLACEHOLDER/\$k6PodName/g; s/K8S_NAMESPACE_PLACEHOLDER/\$K8S_NAMESPACE/g; s/CONFIGMAP_NAME_PLACEHOLDER/\$k6ConfigMapName/g" /tmp/k6-pod.yaml
+
+kubectl apply -n \$K8S_NAMESPACE -f /tmp/k6-pod.yaml
+
+if ! kubectl wait -n \$K8S_NAMESPACE --for=jsonpath='{.status.phase}'=Succeeded pod/\$k6PodName --timeout=10m; then
+        kubectl logs -n \$K8S_NAMESPACE pod/\$k6PodName || true
         exit 1
 fi
 
-kubectl logs -n "$K8S_NAMESPACE" pod/"$k6PodName" | tee "$k6LogFile"
-'''
+kubectl logs -n \$K8S_NAMESPACE pod/\$k6PodName | tee \$k6LogFile
+"""
 
                                         archiveArtifacts artifacts: k6LogFile, fingerprint: true
                                 }
