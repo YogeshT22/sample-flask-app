@@ -203,7 +203,7 @@ kubectl create configmap ${k6ConfigMapName} \
         -n ${K8S_NAMESPACE} \
         --dry-run=client -o yaml | kubectl apply -f -
 
-cat <<'EOF' | kubectl apply -n ${K8S_NAMESPACE} -f -
+cat <<EOF | kubectl apply -n ${K8S_NAMESPACE} -f -
 apiVersion: v1
 kind: Pod
 metadata:
