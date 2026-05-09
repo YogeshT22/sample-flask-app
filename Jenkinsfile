@@ -208,43 +208,38 @@ kubectl create configmap \$k6ConfigMapName \
         -n \$K8S_NAMESPACE \
         --dry-run=client -o yaml | kubectl apply -f -
 
-cat > /tmp/k6-pod.yaml <<'YAMLEOF'
-apiVersion: v1
-kind: Pod
-metadata:
-    name: POD_NAME_PLACEHOLDER
-spec:
-    restartPolicy: Never
-    containers:
-        - name: k6
-            image: grafana/k6:0.56.0
-            command:
-                - k6
-                - run
-                - /scripts/k6-smoke.js
-            env:
-                - name: K6_BASE_URL
-                    value: http://flask-app-service.K8S_NAMESPACE_PLACEHOLDER.svc.cluster.local
-                - name: K6_VUS
-                    value: "5"
-                - name: K6_DURATION
-                    value: "15s"
-            volumeMounts:
-                - name: k6-script
-                    mountPath: /scripts
-    volumes:
-        - name: k6-script
-            configMap:
-                name: CONFIGMAP_NAME_PLACEHOLDER
-YAMLEOF
+cat > /tmp/k6-pod.json <<'JSONTEMPLATE'
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {"name": "POD_NAME_PLACEHOLDER"},
+    "spec": {
+        "restartPolicy": "Never",
+        "containers": [
+            {
+                "name": "k6",
+                "image": "grafana/k6:0.56.0",
+                "command": ["k6", "run", "/scripts/k6-smoke.js"],
+                "env": [
+                    {"name": "K6_BASE_URL", "value": "http://flask-app-service.K8S_NAMESPACE_PLACEHOLDER.svc.cluster.local"},
+                    {"name": "K6_VUS", "value": "5"},
+                    {"name": "K6_DURATION", "value": "15s"}
+                ],
+                "volumeMounts": [{"name": "k6-script", "mountPath": "/scripts"}]
+            }
+        ],
+        "volumes": [{"name": "k6-script", "configMap": {"name": "CONFIGMAP_NAME_PLACEHOLDER"}}]
+    }
+}
+JSONTEMPLATE
 
-sed -i "s/POD_NAME_PLACEHOLDER/\$k6PodName/g; s/K8S_NAMESPACE_PLACEHOLDER/\$K8S_NAMESPACE/g; s/CONFIGMAP_NAME_PLACEHOLDER/\$k6ConfigMapName/g" /tmp/k6-pod.yaml
+sed -i "s/POD_NAME_PLACEHOLDER/\$k6PodName/g; s/K8S_NAMESPACE_PLACEHOLDER/\$K8S_NAMESPACE/g; s/CONFIGMAP_NAME_PLACEHOLDER/\$k6ConfigMapName/g" /tmp/k6-pod.json
 
 # Normalize line endings (strip CR) in case Jenkins checked out files with CRLF
-tr -d '\r' < /tmp/k6-pod.yaml > /tmp/k6-pod.normalized.yaml || true
-mv /tmp/k6-pod.normalized.yaml /tmp/k6-pod.yaml || true
+tr -d '\r' < /tmp/k6-pod.json > /tmp/k6-pod.normalized.json || true
+mv /tmp/k6-pod.normalized.json /tmp/k6-pod.json || true
 
-kubectl apply -n \$K8S_NAMESPACE -f /tmp/k6-pod.yaml
+kubectl apply -n \$K8S_NAMESPACE -f /tmp/k6-pod.json
 
 if ! kubectl wait -n \$K8S_NAMESPACE --for=jsonpath='{.status.phase}'=Succeeded pod/\$k6PodName --timeout=10m; then
         kubectl logs -n \$K8S_NAMESPACE pod/\$k6PodName || true
