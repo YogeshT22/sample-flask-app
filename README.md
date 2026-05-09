@@ -57,6 +57,19 @@ The k6 stage exercises the deployed service inside Kubernetes so the test sees t
 
 The raw k6 summary is archived with each Jenkins build, which makes it easy to compare runs when you are describing the platform on a resume or in a walkthrough.
 
+### k6 Integration Summary
+
+The k6 stage was implemented as an in-cluster smoke/load test to keep traffic realistic and avoid host networking edge-cases.
+
+- A k6 script at `load-tests/k6-smoke.js` validates both `/` and `/health` endpoints.
+- Jenkins creates a temporary `ConfigMap` and short-lived test `Pod` for each build.
+- Test output is streamed into Jenkins console logs and archived as a build artifact.
+- RBAC in `k8s/service-account.yaml` includes the required permissions for `pods`, `pods/log`, and `configmaps`.
+
+For full implementation notes including design choices, rollout steps, and issues faced during debugging, see:
+
+- [`k6-implementation-notes.md`](k6-implementation-notes.md)
+
 ---
 
 ## How to Use
