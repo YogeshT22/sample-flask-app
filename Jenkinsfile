@@ -240,6 +240,10 @@ YAMLEOF
 
 sed -i "s/POD_NAME_PLACEHOLDER/\$k6PodName/g; s/K8S_NAMESPACE_PLACEHOLDER/\$K8S_NAMESPACE/g; s/CONFIGMAP_NAME_PLACEHOLDER/\$k6ConfigMapName/g" /tmp/k6-pod.yaml
 
+# Normalize line endings (strip CR) in case Jenkins checked out files with CRLF
+tr -d '\r' < /tmp/k6-pod.yaml > /tmp/k6-pod.normalized.yaml || true
+mv /tmp/k6-pod.normalized.yaml /tmp/k6-pod.yaml || true
+
 kubectl apply -n \$K8S_NAMESPACE -f /tmp/k6-pod.yaml
 
 if ! kubectl wait -n \$K8S_NAMESPACE --for=jsonpath='{.status.phase}'=Succeeded pod/\$k6PodName --timeout=10m; then
