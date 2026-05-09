@@ -24,6 +24,7 @@ This application is designed to be automatically built, secured, and deployed by
 - **`requirements.txt`**: Lists the Python dependencies required by the application.
 - **`Dockerfile`**: A multi-stage Dockerfile that builds a minimal, secure, and efficient container image for the application.
 - **`Jenkinsfile`**: **The heart of the automation.** This is a "pipeline-as-code" script that instructs a Jenkins server on the exact steps to process this application.
+- **`load-tests/`**: k6 scripts used by the pipeline to smoke-test the deployed service and capture metrics artifacts.
 - **`k8s/`**: A directory containing all Kubernetes manifest files required for deployment.
   - **`deployment.yaml`**: Defines the desired state for running the application on the cluster (e.g., number of replicas).
   - **`service.yaml`**: Creates a stable internal network endpoint for the application pods.
@@ -43,7 +44,18 @@ The `Jenkinsfile` in this repository defines a modern, multi-stage pipeline with
 2.  **Build and Push Docker Image:** Builds a new Docker container image using the `Dockerfile` and tags it with the unique Jenkins build number for versioning. The image is then pushed to a private Docker Registry.
 3.  **Security Scan (DevSecOps Gate):** Uses **Trivy** to scan the newly built image for `HIGH` and `CRITICAL` severity vulnerabilities. **If any are found, the pipeline fails, preventing the insecure image from being deployed.**
 4.  **Deploy to Kubernetes:** If the security scan passes, this stage connects to the Kubernetes cluster using a secure **Service Account Token**. It then uses `kubectl apply` to update the `Deployment` with the new image tag, triggering a **zero-downtime rolling update**.
-5.  **Post Actions:** Performs cleanup tasks, such as pruning old, unused Docker images to save disk space.
+5.  **Load Test with k6:** Runs a short in-cluster k6 smoke/load test against the deployed service, checks the homepage and health endpoint, and archives the k6 output as a build artifact.
+6.  **Post Actions:** Performs cleanup tasks, such as pruning old, unused Docker images to save disk space.
+
+### k6 Test Output
+
+The k6 stage exercises the deployed service inside Kubernetes so the test sees the same service DNS that production traffic would use. It records:
+
+- request failure rate
+- request duration percentiles
+- endpoint checks for `/` and `/health`
+
+The raw k6 summary is archived with each Jenkins build, which makes it easy to compare runs when you are describing the platform on a resume or in a walkthrough.
 
 ---
 
