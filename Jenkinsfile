@@ -218,7 +218,7 @@ cat > /tmp/k6-pod.json <<'JSONTEMPLATE'
         "containers": [
             {
                 "name": "k6",
-                "image": "grafana/k6:0.56.0",
+                "image": "local-docker-registry:5000/k6:0.56.0",
                 "command": ["k6", "run", "/scripts/k6-smoke.js"],
                 "env": [
                     {"name": "K6_BASE_URL", "value": "http://flask-app-service.K8S_NAMESPACE_PLACEHOLDER.svc.cluster.local"},

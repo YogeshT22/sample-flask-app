@@ -1,0 +1,41 @@
+# --------------------------------------
+# ServiceMonitor for Flask App
+# Purpose: Tells the Prometheus Operator to scrape /metrics from the Flask app.
+# Namespace: monitoring (where Prometheus Operator runs)
+# Target: flask-app-service in the default namespace
+# Scrape path: /metrics (auto-exposed by prometheus-flask-exporter)
+# Scrape interval: 15s
+# --------------------------------------
+#
+# IMPORTANT: The label `release: prometheus-stack` is required.
+# kube-prometheus-stack's Prometheus only discovers ServiceMonitors that
+# match its `serviceMonitorSelector`, which defaults to the release label.
+# Without this label, Prometheus silently ignores this ServiceMonitor.
+# --------------------------------------
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: flask-app-monitor
+  namespace: monitoring
+  labels:
+    # Must match Prometheus Operator's serviceMonitorSelector.
+    # The kube-prometheus-stack default selector is: release=<helm-release-name>
+    release: prometheus-stack
+spec:
+  # Watch Services in the 'default' namespace only
+  namespaceSelector:
+    matchNames:
+      - default
+
+  # Select Services labelled app=flask-app
+  selector:
+    matchLabels:
+      app: flask-app
+
+  endpoints:
+    - port: http          # Must match the named port in service.yaml
+      path: /metrics
+      interval: 15s
+      # Strip /health and /metrics from being tracked (already excluded in app.py)
+      # No relabelings needed — exporter handles path filtering.

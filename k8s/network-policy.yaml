@@ -1,0 +1,53 @@
+# --------------------------------------
+# NetworkPolicy for Flask App
+# Purpose: Restrict network access to only what the app legitimately needs.
+# Ingress: Only allow traffic from the k3s ingress controller (Traefik).
+# Egress:  Only DNS (port 53) + allow Prometheus to scrape /metrics (port 5000).
+# All other pod-to-pod traffic is denied by default.
+# --------------------------------------
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flask-app-netpol
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: flask-app
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow traffic from the k3s ingress controller (Traefik).
+    # Traefik runs in the kube-system namespace with app=traefik label.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 5000
+
+    # Allow Prometheus (in monitoring namespace) to scrape /metrics on port 5000.
+    # Remove this block if you haven't added the /metrics endpoint yet.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 5000
+
+  egress:
+    # DNS: allow name resolution so the app can reach external services if needed.
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

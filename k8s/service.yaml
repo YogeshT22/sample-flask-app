@@ -14,7 +14,7 @@ spec:
   selector:
     app: flask-app
   ports:
-    - protocol: TCP
-
+    - name: http
+      protocol: TCP
       port: 80
       targetPort: 5000
