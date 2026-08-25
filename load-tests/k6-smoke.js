@@ -19,13 +19,14 @@ export default function () {
   const homeResponse = http.get(`${baseUrl}/`);
   check(homeResponse, {
     'home endpoint returns 200': (response) => response.status === 200,
-    'home page has deployment heading': (response) => response.body.includes('Welcome to My CI/CD Deployed Application!'),
+    // Check for text present in the v3.0 glassmorphism UI (title tag is reliable and stable)
+    'home page loads correctly': (response) => response.body != null && response.body.includes('Flask App'),
   });
 
   const healthResponse = http.get(`${baseUrl}/health`);
   check(healthResponse, {
     'health endpoint returns 200': (response) => response.status === 200,
-    'health endpoint reports ok': (response) => response.json('status') === 'ok',
+    'health endpoint reports ok': (response) => response.body != null && response.json('status') === 'ok',
   });
 
   sleep(1);
