@@ -180,6 +180,8 @@ stages {
         // and records a reproducible smoke/load summary for the build.
         // ------------------------------------------------------------------
         stage('Load Test with k6') {
+                // Safety net: if the poll loop somehow gets stuck, fail the stage after 5 minutes
+                options { timeout(time: 5, unit: 'MINUTES') }
                 steps {
                         withCredentials([
                                 file(credentialsId: 'kubeconfig-sa', variable: 'KUBECONFIG')
@@ -236,14 +238,34 @@ JSONTEMPLATE
 sed -i "s/POD_NAME_PLACEHOLDER/\$k6PodName/g; s/K8S_NAMESPACE_PLACEHOLDER/\$K8S_NAMESPACE/g; s/CONFIGMAP_NAME_PLACEHOLDER/\$k6ConfigMapName/g" /tmp/k6-pod.json
 
 # Normalize line endings (strip CR) in case Jenkins checked out files with CRLF
-tr -d '\r' < /tmp/k6-pod.json > /tmp/k6-pod.normalized.json || true
+tr -d '\\r' < /tmp/k6-pod.json > /tmp/k6-pod.normalized.json || true
 mv /tmp/k6-pod.normalized.json /tmp/k6-pod.json || true
 
 kubectl apply -n \$K8S_NAMESPACE -f /tmp/k6-pod.json
 
-if ! kubectl wait -n \$K8S_NAMESPACE --for=jsonpath='{.status.phase}'=Succeeded pod/\$k6PodName --timeout=10m; then
+# Poll for pod completion — exits immediately on failure instead of waiting the full timeout.
+# The old 'kubectl wait --for=Succeeded' would hang silently for 10m if the pod failed.
+TIMEOUT=240
+ELAPSED=0
+while [ \$ELAPSED -lt \$TIMEOUT ]; do
+    PHASE=\$(kubectl get pod -n \$K8S_NAMESPACE \$k6PodName -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+    echo "k6 pod phase: \$PHASE (\${ELAPSED}s elapsed)"
+    if [ "\$PHASE" = "Succeeded" ]; then
+        echo "k6 load test completed successfully"
+        break
+    elif [ "\$PHASE" = "Failed" ] || [ "\$PHASE" = "Error" ]; then
+        echo "k6 pod exited with phase: \$PHASE — printing logs:"
         kubectl logs -n \$K8S_NAMESPACE pod/\$k6PodName || true
         exit 1
+    fi
+    sleep 5
+    ELAPSED=\$((ELAPSED + 5))
+done
+
+if [ \$ELAPSED -ge \$TIMEOUT ]; then
+    echo "k6 test timed out after \${TIMEOUT}s"
+    kubectl logs -n \$K8S_NAMESPACE pod/\$k6PodName || true
+    exit 1
 fi
 
 kubectl logs -n \$K8S_NAMESPACE pod/\$k6PodName | tee \$k6LogFile
