@@ -55,7 +55,7 @@ stages {
             script {
 
                 sh """
-                    docker build -t ${FULL_IMAGE} --no-cache .
+                    docker build -t ${FULL_IMAGE} .
                     docker push ${FULL_IMAGE}
                 """
 
