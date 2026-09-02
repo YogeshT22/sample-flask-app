@@ -116,7 +116,6 @@ stages {
                 ]) {
 
                     sh """
-                        export COSIGN_PASSWORD=${COSIGN_PASSWORD}
                         cosign sign \
                             --yes \
                             --tlog-upload=false \
