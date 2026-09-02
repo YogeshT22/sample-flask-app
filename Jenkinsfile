@@ -243,9 +243,9 @@ mv /tmp/k6-pod.normalized.json /tmp/k6-pod.json || true
 kubectl apply -n \$K8S_NAMESPACE -f /tmp/k6-pod.json
 
 # Brief settle time: after a rolling update, endpoint slice propagation can lag
-# by a few seconds causing 'connection refused' if k6 fires immediately.
-echo "Waiting 10s for service endpoints to fully stabilize..."
-sleep 10
+# by up to 20s causing 'connection refused' if k6 fires immediately.
+echo "Waiting 25s for service endpoints to fully stabilize..."
+sleep 25
 
 # Poll for pod completion — exits immediately on failure instead of waiting the full timeout.
 # The old 'kubectl wait --for=Succeeded' would hang silently for 10m if the pod failed.
