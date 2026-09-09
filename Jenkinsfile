@@ -245,12 +245,14 @@ sed -i "s/POD_NAME_PLACEHOLDER/\$k6PodName/g; s/K8S_NAMESPACE_PLACEHOLDER/\$K8S_
 tr -d '\\r' < /tmp/k6-pod.json > /tmp/k6-pod.normalized.json || true
 mv /tmp/k6-pod.normalized.json /tmp/k6-pod.json || true
 
-kubectl apply -n \$K8S_NAMESPACE -f /tmp/k6-pod.json
+# Endpoint stabilization: sleep BEFORE creating the k6 pod so k6 fires
+# its first request only after endpoints are fully propagated.
+# The sleep must happen here — k6 starts hitting the service the moment
+# its container starts, not when Jenkins resumes after kubectl apply.
+echo "Waiting 45s for service endpoints to fully stabilize after rolling update..."
+sleep 45
 
-# Brief settle time: after a rolling update, endpoint slice propagation can lag
-# by up to 20s causing 'connection refused' if k6 fires immediately.
-echo "Waiting 25s for service endpoints to fully stabilize..."
-sleep 25
+kubectl apply -n \$K8S_NAMESPACE -f /tmp/k6-pod.json
 
 # Poll for pod completion — exits immediately on failure instead of waiting the full timeout.
 # The old 'kubectl wait --for=Succeeded' would hang silently for 10m if the pod failed.
