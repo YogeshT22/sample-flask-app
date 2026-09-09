@@ -115,20 +115,25 @@ stages {
                     string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
                 ]) {
 
-                    sh """
-                        cosign sign \
+                    // COSIGN_PASSWORD is prefixed inline so the shell always has it set,
+                    // even when the credential value is an empty string (no-password key).
+                    // Cosign checks the env var first; if unset/empty it falls back to an
+                    // interactive TTY prompt which fails in Jenkins ("inappropriate ioctl for device").
+                    // ${COSIGN_PASSWORD:-} defaults to "" if withCredentials didn't export it.
+                    sh '''
+                        COSIGN_PASSWORD="${COSIGN_PASSWORD:-}" cosign sign \
                             --yes \
                             --tlog-upload=false \
-                            --key ${COSIGN_PRIVATE_KEY} \
-                            ${IMAGE_DIGEST}
-                    """
+                            --key "${COSIGN_PRIVATE_KEY}" \
+                            "${IMAGE_DIGEST}"
+                    '''
 
-                    sh """
+                    sh '''
                         cosign verify \
                             --key cosign.pub \
                             --insecure-ignore-tlog \
-                            ${IMAGE_DIGEST}
-                    """
+                            "${IMAGE_DIGEST}"
+                    '''
                 }
             }
         }
